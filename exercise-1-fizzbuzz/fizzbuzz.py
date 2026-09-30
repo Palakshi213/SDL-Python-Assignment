@@ -18,14 +18,14 @@ def fizzbuzz(num_range, rules):
     rules: Default or Custom, this will include the custom word and replacement
 
     Variables:
-    div: number to replace input from user (divisor)
+    factor: number to replace input from user (divisor)
     repWord: replacement word input from user
     '''
     output_list = []
     for i in num_range:
        output = ""
-       for div, rep_word in rules:
-           if i % div == 0:
+       for factor, rep_word in rules:
+           if i % factor == 0:
                output += rep_word
        if output:
          output_list.append(output)
@@ -42,13 +42,13 @@ def extended():
 def parseRules(input_str):
     '''
     inputString: user input for custom rules
-    divString: the number input by user as a string
-    repWord: replacement word input from user
+    factor_str: the number input by user as a string
+    rep_word: replacement word input from user
     '''
     rules = []
     for pair in input_str.split(","):
-        div_str, rep_word = pair.split(":")
-        rules.append((int(div_str.strip()), rep_word.strip()))
+        factor_str, rep_word = pair.split(":")
+        rules.append((int(factor_str.strip()), rep_word.strip()))
     return rules
 
 def makeRules(num_str, words_str):
@@ -96,9 +96,9 @@ def askUser(default_max, default_rules):
 
 def formatOutput(results):
     for i, value in enumerate(results):
-        print(f"{i}. {value}")
+        print(f"{i+1}. {value}")
 
-
+         
 def main():
     parser = argparse.ArgumentParser(description="Play FizzBuzz with default, extended, or custom rules.")
     parser.add_argument("--max", type=int, default=100, help="Max number to count to (default: 100)")
@@ -106,7 +106,7 @@ def main():
         "--mode",
         choices=["default", "extended", "custom"],
         default="custom",
-        help="Pick rules directly, or go interactive and get asked (default: interactive)",
+        help="Pick rules directly, or go interactive and get asked (default: custom)",
     )
     args = parser.parse_args()
 
@@ -132,7 +132,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\nCancelled.")
+        print("\nFinished.")
 
 
 
