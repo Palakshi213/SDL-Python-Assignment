@@ -19,7 +19,7 @@ def fizzbuzz(num_range, rules):
 
     Variables:
     factor: number to replace input from user (divisor)
-    repWord: replacement word input from user
+    rep_word: replacement word input from user
     '''
     output_list = []
     for i in num_range:
@@ -41,7 +41,7 @@ def extended():
 
 def parseRules(input_str):
     '''
-    inputString: user input for custom rules
+    input_string: user input for custom rules
     factor_str: the number input by user as a string
     rep_word: replacement word input from user
     '''
