@@ -1,4 +1,4 @@
-#!/usr/bin/env python 3
+#!/usr/bin/env python3
 # exercicse-4-apollo.py
 # Author: Martin CLOTUCHE
 
@@ -6,6 +6,9 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+# Map visualization
+from matplotlib.collections import LineCollection
 
 
 def read_apollo_txt(filepath):
@@ -122,6 +125,86 @@ def plot_parameters_vs_time(dic, savepath):
     print(f"Apollo parameters evolution figure sucessfully saved in {savepath}")
 
 
+def plot_groundtrack(dic, savepath="apollo_groundtrack.pdf"):
+    """
+    Plot the groundtrack & altitude of the Apollo-11 mission
+
+    Parameters
+    ----------
+    dic : dict
+        Dictionary mapping parameter names to their time-series values.
+    savepath: str
+        Path of the file where the pdf should be outputted
+
+    Returns
+    -------
+    None
+        Saves the plot to the savepath location.
+    """
+    # Get relevant data from dictionary
+    lon = np.asarray(dic["LONG"], dtype=float)
+    lat = np.asarray(dic["GC LAT"], dtype=float)
+    alt = np.asarray(dic["ALTITUDE"], dtype=float)
+    alt /= 1e3  # Convert in km
+
+    # Map image (geographic projection): 120W to 30W, 15N to 60N
+    lon_min, lon_max = -120, -30
+    lat_min, lat_max = 15, 60
+    im = plt.imread("maps/NE1_50M_SR_W_CROPPED_1080.png")
+
+    # Create figure, plot the map
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.imshow(im, extent=[lon_min, lon_max, lat_min, lat_max])
+    ax.set_aspect("equal")
+
+    # Gridlines & labels
+    ax.grid(True, color="white", alpha=0.5, linewidth=0.5, linestyle="--")
+    ax.set_xlabel("Longitude [deg E]")
+    ax.set_ylabel("Latitude [deg N]")
+
+    points = np.column_stack([lon, lat]).reshape(-1, 1, 2)
+    segments = np.concatenate([points[:-1], points[1:]], axis=1)
+
+    # Create the displacement line with colormap using LineCollection from plt
+    norm = plt.Normalize(alt.min(), alt.max())
+    lc = LineCollection(
+        segments,
+        cmap="seismic",
+        norm=norm,
+        linewidth=2,
+    )
+    lc.set_array(alt)
+    ax.add_collection(lc)
+    cbar = fig.colorbar(lc, ax=ax, orientation="vertical", shrink=0.7, pad=0.07)
+    cbar.set_label("Altitude [km]")
+
+    # Start / end markers
+    ax.plot(
+        lon[0],
+        lat[0],
+        "o",
+        color="blue",
+        markersize=8,
+        label=f"Start: ({-lon[0]} W, {lat[0]} N, {alt[0]} km alt) ",
+    )
+    ax.plot(
+        lon[-1],
+        lat[-1],
+        "*",
+        color="red",
+        markersize=8,
+        label=f"End: ({-lon[-1]} W, {lat[-1]} N, {alt[-1]} km alt)",
+    )
+    ax.legend(loc="upper left")
+
+    # Title & save
+    ax.set_title("Ground track and altitude evolution of Apollo-11 mission")
+    plt.savefig(savepath, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Apollo groundtrack evolution successfully saved in {savepath}")
+
+
 if __name__ == "__main__":
     apollo_dic = read_apollo_txt("as-505-ascent-phase-data.txt")
     plot_parameters_vs_time(apollo_dic, savepath="apollo_params_vs_t.pdf")
+    plot_groundtrack(apollo_dic, savepath="apollo_groundtrack.pdf")
