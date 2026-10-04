@@ -15,11 +15,13 @@ There are four plots:
 4. The Wavelength v. Flux Spectrum overlaid by the baseline continuum and a Gaussian fit of the emission line peak
 
 """
-import numpy as np
-from pathlib import Path
-import matplotlib.pyplot as plt
-from specfunc import *
+
 import argparse
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+from specfunc import find_continuum, find_continuum_masked, fit_gaussian, get_spectrum
 
 
 def main():
@@ -30,74 +32,103 @@ def main():
     args = parser.parse_args()
     filename = args.filename
 
-    plt.close('all')
-    wavelength, flux = get_spectrum(filename)
+    plt.close("all")
 
     # --- Part 1: Spectrum of Wavelength vs. Flux ---
+    wavelength, flux = get_spectrum(filename)
+
+    # Plotting
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(wavelength, flux, c='#EB5959')
+    ax.plot(wavelength, flux, c="#EB5959")
     ax.set_title("Wavelength v. Flux Spectrum")
     ax.set_xlabel("Wavelength (Å)")
     ax.set_ylabel("Flux (ADU)")
     ax.grid(True)
 
     # --- Part 2: Spectrum and Baseline Continuum  ---
-    continuum, slope = find_continuum(wavelength, flux)
-
+    continuum, slope, intercept, slope_err, intercept_err = find_continuum(wavelength, flux)
+    
+    # Plotting
     fig, ax = plt.subplots(figsize=(12, 6))
     ax.set_title("Wavelength v. Flux Spectrum")
-    ax.plot(wavelength, flux, c='#EB5959', label="Spectrum")
-    ax.plot(wavelength, continuum, c='blue', lw=2, label="Continuum (Polynomial Fit)")
-    ax.set_title("Wavelength v. Flux Spectrum")
+    ax.plot(wavelength, flux, c="#EB5959", label="Spectrum")
+    ax.plot(wavelength, continuum, c="blue", lw=2, label=f"Continuum (1st-order Polynomial Fit)\n \
+    Slope={slope:.2f} ADU/Å - uncertainity: {slope_err:.2f}\n\
+    Intercept={intercept:.2f} ADU -  uncertainity: {intercept_err:.2f}")
+    ax.set_title("Wavelength v. Flux Spectrum - 1st order fit on whole spectrum")
     ax.set_xlabel("Wavelength (Å)")
     ax.set_ylabel("Flux (ADU)")
-    ax.set_facecolor('lightgrey')
+    ax.set_facecolor("lightgrey")
     ax.grid(True)
     ax.legend()
+
+    # Logging
+    print("1st order polynomial fit - without emission line masking\n------")
     print(f"Wave Range: {min(wavelength):.1f} to {max(wavelength):.1f} Å")
-    print(f"Slope: {slope}")
+    print(f"Slope: {slope:.3f} ADU/Å; uncertainity: {slope_err:.3f}")
+    print(f"Intercept: {intercept:.3f} ADU ; uncertainity: {intercept_err:.3f} \n")
+
 
     # --- Part 3: Spectrum and Continuum with the Emission Line Ignored ---
-    continuum_masked, slope, mask, peak_wave = find_continuum_masked(wavelength, flux)
-    print(f"Peak Wave: {peak_wave}")
-    print(f"Slope (masked): {slope}")
+    wv_width = 10 # Chosen value for the wavelength width
+    continuum_masked, slope_masked, intercept_masked, mask, peak_wave, slope_err_masked, intercept_err_masked = find_continuum_masked(wavelength, flux, wv_width)
 
+    # Plotting
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.set_title("Wavelength v. Flux Spectrum")
-    ax.plot(wavelength, flux, c='#EB5959', lw=0.7, label="Spectrum")
-    ax.plot(wavelength, continuum_masked, c='b', lw=2, label="Continuum")
+    ax.plot(wavelength, flux, c="#EB5959", lw=0.7, label=f"Spectrum\nPeak wave at: {peak_wave:.2f} Å")
+    ax.plot(wavelength, continuum_masked, c="b", lw=2, label=f"Continuum\n\
+    Slope={slope_masked:.3f} ADU/Å - uncertainity: {slope_err_masked:.3f}\n\
+    Intercept={intercept_masked:.3f} ADU -  uncertainity: {intercept_err_masked:.3f}")
+    ax.set_title("Wavelength v. Flux Spectrum - 1st order fit ignoring emission line peak")
     ax.set_xlabel("Wavelength (Å)")
     ax.set_ylabel("Flux (ADU)")
-    ax.axvspan(peak_wave - 10, peak_wave + 10, color='gray', alpha=0.3, label="Masked")
-    ax.set_facecolor('lightgrey')
+    ax.axvspan(peak_wave - wv_width, peak_wave + wv_width, color="gray", alpha=0.3, label=f"Masked Region\n Chosen width: {wv_width*2}")
+    ax.set_facecolor("lightgrey")
     ax.legend()
     ax.grid(True)
 
+    # Logging
+    print("1st order polynomial fit - with emission line masking\n------")
+    print(f"Peak Wave: {peak_wave}")
+    print(f"Chosen emission line width: {wv_width*2} \n")
+    
+    print(f"Slope (masked) ADU/Å: {slope_masked:.3f} ; uncertainity: {slope_err_masked:.3f}")
+    print(f"Intercept (masked) ADU: {intercept_masked:.3f} ; uncertainity: {intercept_err_masked:.3f} \n")
+
+
     # --- Part 4: Gaussian Fit ---
-    gopt, gerr, line, fwhm, c0, sigma_guess = fit_gaussian(wavelength, flux)
+    gopt, gerr, line, fwhm, c0, sigma_guess, peak_region_mask = fit_gaussian(wavelength, flux, wv_width)
     A, mu, sigma = gopt
     A_err, mu_err, sigma_err = gerr
     fwhm_err = 2.355 * sigma_err
 
-    print(f"Centre = {mu:.3f} ± {mu_err:.3f} Å, "
-          f"FWHM = {fwhm:.6f} ± {fwhm_err:.3f} Å, "
-          f"amplitude = {A:.2f} ± {A_err:.3f} ADU")
-
-    print(f"Uncertainties (A, mu, sigma): {gerr}")
-
+    # Plotting
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.set_title("Wavelength v. Flux Spectrum")
-    ax.plot(wavelength, flux, c='#EB5959', lw=0.7, label="Spectrum")
-    ax.plot(wavelength, c0, c='b', lw=2, label="Continuum")
-    ax.axvspan(peak_wave - 10, peak_wave + 10, color='gray', alpha=0.3, label="Peak Region")
-    ax.plot(wavelength, line, c='k', lw=1.5, label="Gaussian Fit")
-    ax.set_facecolor('lightgrey')
+    ax.set_title("Wavelength v. Flux Spectrum - Gaussian fit on emission line")
+    ax.plot(wavelength, flux, c="#EB5959", lw=0.7, label="Spectrum")
+    ax.plot(wavelength, c0, c="b", lw=2, label="Continuum")
+    ax.axvspan(
+        peak_wave - wv_width, peak_wave + wv_width, color="gray", alpha=0.3, label="Peak Region"
+    )
+    ax.plot(np.asarray(wavelength)[peak_region_mask], line, c="k", lw=1.5, label=f"Gaussian Fit \n \
+        Centre = {mu:.3f} ± {mu_err:.3f} Å \n \
+        FWHM = {fwhm:.6f} ± {fwhm_err:.3f} Å\n \
+        Amplitude = {A:.2f} ± {A_err:.3f} ADU")
+    ax.set_facecolor("lightgrey")
     ax.set_xlabel("Wavelength (Å)")
     ax.set_ylabel("Flux (ADU)")
     ax.legend()
     ax.grid(True)
-
     plt.show()
+
+    # Logging
+    print("Gaussian fit\n------")
+    print(
+        f"Centre = {mu:.3f} ± {mu_err:.3f} Å\n"
+        f"FWHM = {fwhm:.6f} ± {fwhm_err:.3f} Å\n"
+        f"Amplitude = {A:.2f} ± {A_err:.3f} ADU"
+    )
+    print(f"Uncertainties (A, mu, sigma): {gerr}")
 
 
 if __name__ == "__main__":

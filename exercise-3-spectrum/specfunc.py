@@ -28,18 +28,16 @@ for running the script : 'spectrum.py'. Ensure these are in the same folder befo
 
     - Returns a Gaussian function
 
-6. fit_gaussian(wave, flux, region_width=10.0)
+6. fit_gaussian(wave, flux, wv_width=10.0)
 
     - Fits a Gaussian function to the emission line peak
-    -
-
-
-
 """
 
-import numpy as np
 from pathlib import Path
+
+import numpy as np
 from scipy.optimize import curve_fit
+
 
 def parse_textfile(filename):
     """
@@ -47,6 +45,7 @@ def parse_textfile(filename):
 
     :param filename: A string which contains the file to parse
     :return: result: A dictionary which contains the headers and data from a .txt file
+    :raises FileNotFoundError: If the file does not exist
     """
 
     # Set up for the dictionary which will contain the data from .txt file
@@ -54,8 +53,12 @@ def parse_textfile(filename):
     data_rows = []
     current_key = None
 
+    path = Path(filename)
+    if not path.exists():
+        raise FileNotFoundError(f"Text file not found: {path}")
+
     # Open the file using 'read' mode, separate the header information and data values by filtering exact key values
-    with Path(filename).open("r", encoding="utf-8") as f:
+    with path.open("r", encoding="utf-8") as f:
         for line in f:
             stripped = line.strip()
             if not stripped:
@@ -80,7 +83,7 @@ def parse_textfile(filename):
         for row in data_rows[1:]:
             for col, value in zip(columns, row.split(",")):
                 data[col].append(float(value))
-        result["DATA"] = data # Store the data separately from the header information
+        result["DATA"] = data  # Store the data separately from the header information
 
     return result
 
@@ -92,7 +95,7 @@ def get_spectrum(filename):
     :return: wavelength, flux : Lists of floats which contains wavelength and flux data, from the spectrum
     """
     # Use specific headers to extract the wavelength and flux data as lists of floats
-    spectrum = parse_textfile("spectrum.txt")
+    spectrum = parse_textfile(filename)
     wavelength = spectrum["DATA"]["WAVELENGTH"]
     flux = spectrum["DATA"]["FLUX"]
 
@@ -109,17 +112,22 @@ def find_continuum(wave, flux):
 
     :return: c0: The baseline continuum fit using polyfit
     :return: slope: The slope of the linear continuum
+    :return: intercept: The intercept of the linear continuum
+    :return: slope_err: The uncertainity on the slope
+    :return: intercept_err: The uncertainity on the intercept
     """
     # Evaluate the coefficients of the polynomial to degree = 1, y = mx+c
     # This returns the coefficients (m, c)
 
-    coeffs = np.polyfit(wave, flux, deg=1)
-    slope = coeffs[0]
+    coeffs, covariance = np.polyfit(wave, flux, deg=1, cov=True)
+    slope, intercept = coeffs
+    slope_err, intercept_err = np.sqrt(np.diag(covariance))
 
     # Evaluates the polynomial at the values of the wave function
     c0 = np.polyval(coeffs, wave)
 
-    return c0, slope
+    return c0, slope, intercept, slope_err, intercept_err
+
 
 def find_continuum_masked(wave, flux, wv_width=10):
     """
@@ -131,11 +139,13 @@ def find_continuum_masked(wave, flux, wv_width=10):
 
     :return: The continuum masked region of the emission line
     :return: slope: The slope of the linear continuum
+    :return: intercept: The intercept of the linear continuum
     :return: mask: The region of the emission line peak
     :return: peak_wave: The peak wavelength
-
-
+    :return: slope_err: The uncertainity on the slope
+    :return: intercept_err: The uncertainity on the intercept
     """
+
     wave = np.asarray(wave, dtype=float)
     flux = np.asarray(flux, dtype=float)
 
@@ -146,11 +156,15 @@ def find_continuum_masked(wave, flux, wv_width=10):
     mask = np.abs(wave - peak_wave) > wv_width
 
     # Evaluates the polynomial, ignoring the emission peak
-    coeffs = np.polyfit(wave[mask], flux[mask], deg=1)
-    continuum_masked = np.polyval(coeffs, wave)
+    coeffs, covariance = np.polyfit(wave[mask], flux[mask], deg=1, cov=True)
     slope = coeffs[0]
+    intercept = coeffs[1]
+    slope_err, intercept_err = np.sqrt(np.diag(covariance))
 
-    return continuum_masked, slope, mask, peak_wave
+    continuum_masked = np.polyval(coeffs, wave)
+
+    return continuum_masked, slope, intercept, mask, peak_wave, slope_err, intercept_err
+
 
 def gauss(x, A, mu, sigma):
     """A function which calculates the Gaussian function of data:
@@ -163,16 +177,17 @@ def gauss(x, A, mu, sigma):
     :return: Gaussian function
 
     """
-    return A * np.exp(-(x - mu)**2 / (2 * sigma**2))
+    return A * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
-def fit_gaussian(wave, flux, region_width=10.0):
+
+def fit_gaussian(wave, flux, wv_width=10.0):
     """
 
     This function which fits a Gaussian function to the emission line peak
 
     :param wave: The wavelength data (Å)
     :param flux: The flux data (ADU)
-    :param region_width: The region around peak wavelength considered as the emission line peak
+    :param wv_width: The region around peak wavelength considered as the emission line peak
 
     :return: gopt:
     :return: gcov:
@@ -181,12 +196,13 @@ def fit_gaussian(wave, flux, region_width=10.0):
     :return: fwhm: Full-width at half maximum
     :return: c0: The baseline continuum
     :return: sigma_guess: The initial parameter used for sigma, i.e. the standard deviation
+    :return: peak_region_mask: Mask indicating the peak region
     """
     wave = np.asarray(wave, dtype=float)
     flux = np.asarray(flux, dtype=float)
 
     # Baseline (uses the continuum which does not remove the emission line peak)
-    c0, slope = find_continuum(wave, flux)
+    c0, slope, intercept, slope_err, intercept_err = find_continuum(wave, flux)
     peak_wave = wave[np.argmax(flux)]
     sigma_guess = np.std(wave)
 
@@ -194,8 +210,8 @@ def fit_gaussian(wave, flux, region_width=10.0):
     line_base = flux - c0
 
     # Fit only the region around the peak
-    peak_region = np.abs(wave - peak_wave) < region_width
-    wv_base, flux_base = wave[peak_region], line_base[peak_region]
+    peak_region_mask = np.abs(wave - peak_wave) < wv_width
+    wv_base, flux_base = wave[peak_region_mask], line_base[peak_region_mask]
 
     # Starting guesses: [A, mu, sigma]
     # The amplitude guess is the maximum flux value (A = flux_base.max() )
@@ -210,22 +226,9 @@ def fit_gaussian(wave, flux, region_width=10.0):
 
     # Fitted line sitting on top of the baseline, at every wavelength
     line = c0 + gauss(wave, *gopt)
+    line = line[peak_region_mask]
 
     # Calculate the Full-Width Half-Max
     fwhm = 2.355 * abs(gopt[2])
 
-    return gopt, gerr, line, fwhm, c0, sigma_guess
-
-def uncertainties(wave, flux):
-    """
-    This function calculates the uncertainties of polynomial and Gaussian fitting functions"""
-    wave = np.asarray(wave, dtype=float)
-    flux = np.asarray(flux, dtype=float)
-    pass
-
-
-
-
-
-
-
+    return gopt, gerr, line, fwhm, c0, sigma_guess, peak_region_mask
