@@ -171,10 +171,16 @@ def fit_gaussian(wave, flux, region_width=10.0):
     This function which fits a Gaussian function to the emission line peak
 
     :param wave: The wavelength data (Å)
-    :param flux:
-    :param region_width:
+    :param flux: The flux data (ADU)
+    :param region_width: The region around peak wavelength considered as the emission line peak
 
-    :return:
+    :return: gopt:
+    :return: gcov:
+    :return: line: The Gaussian fitted line over the emission line peak
+    :return: peak_wave: Wavelength at maximum flux value
+    :return: fwhm: Full-width at half maximum
+    :return: c0: The baseline continuum
+    :return: sigma_guess: The initial parameter used for sigma, i.e. the standard deviation
     """
     wave = np.asarray(wave, dtype=float)
     flux = np.asarray(flux, dtype=float)
@@ -208,7 +214,7 @@ def fit_gaussian(wave, flux, region_width=10.0):
     # Calculate the Full-Width Half-Max
     fwhm = 2.355 * abs(gopt[2])
 
-    return gopt, gerr, line, fwhm, c0, slope, sigma_guess
+    return gopt, gerr, line, fwhm, c0, sigma_guess
 
 def uncertainties(wave, flux):
     """
