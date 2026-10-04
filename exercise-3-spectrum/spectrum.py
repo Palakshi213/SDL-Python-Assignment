@@ -54,36 +54,36 @@ def main():
     ax.set_facecolor('lightgrey')
     ax.grid(True)
     ax.legend()
-    print(f"Wave Range: {min(wavelength):.1f} to {max(wavelength):.1f} Å")
-    print(f"Slope: {slope}")
+    print(f"1. Wavelength v. Flux Spectrum: \n ------------------------ ")
+    print(f"Wavelength Range of Spectrum: {min(wavelength):.1f} to {max(wavelength):.1f} Å")
+    print(f"Flux Range of Spectrum: {min(flux):.1f} to {max(flux):.1f} ADU \n ------------------------ ")
+
 
     # --- Part 3: Spectrum and Continuum with the Emission Line Ignored ---
     continuum_masked, slope, mask, peak_wave = find_continuum_masked(wavelength, flux)
-    print(f"Peak Wave: {peak_wave}")
-    print(f"Slope (masked): {slope}")
+
 
     fig, ax = plt.subplots(figsize=(12, 6))
     ax.set_title("Wavelength v. Flux Spectrum")
+
     ax.plot(wavelength, flux, c='#EB5959', lw=0.7, label="Spectrum")
     ax.plot(wavelength, continuum_masked, c='b', lw=2, label="Continuum")
+
     ax.set_xlabel("Wavelength (Å)")
     ax.set_ylabel("Flux (ADU)")
+
+    # Mark the peak wavelength region (the mask) on the plot
     ax.axvspan(peak_wave - 10, peak_wave + 10, color='gray', alpha=0.3, label="Masked")
     ax.set_facecolor('lightgrey')
     ax.legend()
     ax.grid(True)
 
     # --- Part 4: Gaussian Fit ---
+
+    # Call and evaluate the uncertainties from the Gaussian fitting
+
     gopt, gerr, line, fwhm, c0, sigma_guess = fit_gaussian(wavelength, flux)
-    A, mu, sigma = gopt
-    A_err, mu_err, sigma_err = gerr
-    fwhm_err = 2.355 * sigma_err
-
-    print(f"Centre = {mu:.3f} ± {mu_err:.3f} Å, "
-          f"FWHM = {fwhm:.6f} ± {fwhm_err:.3f} Å, "
-          f"amplitude = {A:.2f} ± {A_err:.3f} ADU")
-
-    print(f"Uncertainties (A, mu, sigma): {gerr}")
+    uncertainties(wavelength, flux)
 
     fig, ax = plt.subplots(figsize=(12, 6))
     ax.set_title("Wavelength v. Flux Spectrum")
