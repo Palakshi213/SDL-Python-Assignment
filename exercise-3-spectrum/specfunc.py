@@ -232,3 +232,22 @@ def fit_gaussian(wave, flux, wv_width=10.0):
     fwhm = 2.355 * abs(gopt[2])
 
     return gopt, gerr, line, fwhm, c0, sigma_guess, peak_region_mask
+
+def uncertainties(wave, flux):
+    gopt, gerr, line, fwhm, *_ = fit_gaussian(wave, flux)
+    A, mu, sigma = gopt
+    A_err, mu_err, sigma_err = gerr
+    fwhm_err = 2.355 * sigma_err
+
+    print(f"2. Gaussian Fitting Uncertainties: \n ------------------------ ")
+    print(f"Centre = {mu:.3f} ± {mu_err:.3f} Å\n"
+          f"FWHM = {fwhm:.5f} ± {fwhm_err:.3f} Å\n"
+          f"Amplitude = {A:.2f} ± {A_err:.3f} ADU\n"
+          f"Sigma = {sigma: .2f} ± {sigma_err:.2f}\n ")
+
+
+
+
+
+
+
