@@ -58,8 +58,8 @@ def main():
     ax.set_title("Wavelength v. Flux Spectrum")
     ax.plot(wavelength, flux, c="#EB5959", label="Spectrum")
     ax.plot(wavelength, continuum, c="blue", lw=2, label=f"Continuum (1st-order Polynomial Fit)\n \
-    Slope={slope:.2f} ADU/Å - Uncertainity: {slope_err:.2f}\n\
-    Intercept={intercept:.2f} ADU -  Uncertainity: {intercept_err:.2f}")
+    Slope={slope:.2f} ADU/Å - Uncertainty: {slope_err:.2f}\n\
+    Intercept={intercept:.2f} ADU -  Uncertainty: {intercept_err:.2f}")
     ax.set_title("Wavelength v. Flux Spectrum - 1st order fit on whole spectrum")
     ax.set_xlabel("Wavelength (Å)")
     ax.set_ylabel("Flux (ADU)")
@@ -82,8 +82,8 @@ def main():
     fig, ax = plt.subplots(figsize=(12, 6))
     ax.plot(wavelength, flux, c="#EB5959", lw=0.7, label=f"Spectrum\nPeak wave at: {peak_wave:.2f} Å")
     ax.plot(wavelength, continuum_masked, c="b", lw=2, label=f"Continuum\n\
-    Slope={slope_masked:.3f} ADU/Å - Uncertainity: {slope_err_masked:.3f}\n\
-    Intercept={intercept_masked:.3f} ADU -  Uncertainity: {intercept_err_masked:.3f}")
+    Slope={slope_masked:.3f} ADU/Å - Uncertainty: {slope_err_masked:.3f}\n\
+    Intercept={intercept_masked:.3f} ADU -  Uncertainty: {intercept_err_masked:.3f}")
     ax.set_title("Wavelength v. Flux Spectrum - 1st order fit ignoring emission line peak")
     ax.set_xlabel("Wavelength (Å)")
     ax.set_ylabel("Flux (ADU)")
@@ -97,8 +97,8 @@ def main():
     print(f"Peak Wave: {peak_wave}")
     print(f"Chosen emission line width: {wv_width*2} \n")
     
-    print(f"Slope (masked) ADU/Å: {slope_masked:.3f} ; Uncertainity: {slope_err_masked:.3f}")
-    print(f"Intercept (masked) ADU: {intercept_masked:.3f} ; Uncertainity: {intercept_err_masked:.3f} \n")
+    print(f"Slope (masked) ADU/Å: {slope_masked:.3f} ; Uncertainty: {slope_err_masked:.3f}")
+    print(f"Intercept (masked) ADU: {intercept_masked:.3f} ; Uncertainty: {intercept_err_masked:.3f} \n")
 
 
     # --- Part 4: Gaussian Fit ---
@@ -125,7 +125,6 @@ def main():
     ax.legend()
     ax.grid(True)
     plt.show()
-
 
     # Logging
     print("Gaussian fit\n------")
