@@ -22,15 +22,19 @@ import argparse
 
 def fizzbuzz(num_range, rules):
     '''
+    Replaces numbers in a list with replacement words
 
-    numberRange: range of numbers, used when the user tells us max number
-    rules: Default or Custom, this will include the custom word and replacement
+    Parameters:
+    ------------
+    num_range: range of numbers, used when the user tells us max number
+    rules: Default, Extended, or Custom, this will include the custom word and replacement
 
-    Variables:
-    ___________
-    factor: number to replace input from user (divisor)
-    repWord: replacement word input from user
+    Returns:
+   -------------
+   output_list: list with replacement words
     '''
+
+    # Basic control flow for replacing numbers with words and creating list
     output_list = []
     for i in num_range:
        output = ""
@@ -43,17 +47,29 @@ def fizzbuzz(num_range, rules):
            output_list.append(i)
     return output_list
 
+
 def default():
+    """
+    Default FizzBuzz Game Rules
+    """
     return [(3, "Fizz"), (5, "Buzz")]
 
 def extended():
+    """
+    Extended FizzBuzz Game Rules
+    """
     return [(3, "Fizz"), (5, "Buzz"), (7, "Fang"), (11, "Bang")]
 
 def parseRules(input_str):
     '''
-    inputString: user input for custom rules
-    factor_str: the number input by user as a string
-    rep_word: replacement word input from user
+
+
+    Parameters:
+    ------------
+    input_str: user input for custom rules
+
+    Returns:
+    ------------
     '''
     rules = []
     for pair in input_str.split(","):
