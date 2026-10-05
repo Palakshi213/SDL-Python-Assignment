@@ -11,15 +11,15 @@ def power_tracker():
     At each iteration:
         - randomly choose to ^2 or ^3 number
         - store result
-        - track largest & smallest result
+        - track largest & smalllest result
         - check if current result divisible by previous one -> exit condition
             - Bonus: invalid if previous number is one or the same as previous
     """
 
     # Set initial numbers to None
-    prev_nb = None
-    max_nb_mult = None
-    min_nb_mult = None
+    prev_nb = None          # used for the exit condition
+    max_nb_mult = None      # to keep track of the maximum number encountered
+    min_nb_mult = None      # to keep track of the minimum number encountered
 
     i = 1
     exit_bool = False
