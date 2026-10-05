@@ -107,6 +107,16 @@ def main():
     A_err, mu_err, sigma_err = gerr
     fwhm_err = 2.355 * sigma_err
 
+    print("Gaussian fit\n------")
+    print(
+        f"Centre = {mu:.3f} ± {mu_err:.3f} Å\n"
+        f"FWHM = {fwhm:.6f} ± {fwhm_err:.3f} Å\n"
+        f"Amplitude = {A:.2f} ± {A_err:.3f} ADU\n"
+        f"Sigma Initial Parameter = {sigma_guess:.3f} \n"
+        f"Sigma = {sigma:.3f} ± {sigma_err:.3f} \n"
+    )
+    print(f"Uncertainties (A, mu, sigma): {gerr}")
+
     # Plotting
     fig, ax = plt.subplots(figsize=(12, 6))
     ax.set_title("Wavelength v. Flux Spectrum - Gaussian fit on emission line")
@@ -126,15 +136,8 @@ def main():
     ax.grid(True)
     plt.show()
 
-    # Logging
-    print("Gaussian fit\n------")
-    print(
-        f"Centre = {mu:.3f} ± {mu_err:.3f} Å\n"
-        f"FWHM = {fwhm:.6f} ± {fwhm_err:.3f} Å\n"
-        f"Amplitude = {A:.2f} ± {A_err:.3f} ADU"
-    )
-    print(f"Uncertainties (A, mu, sigma): {gerr}")
 
 
 if __name__ == "__main__":
     main()
+    exit()
