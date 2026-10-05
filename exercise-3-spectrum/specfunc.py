@@ -201,8 +201,8 @@ def fit_gaussian(wave, flux, wv_width=10.0):
     wave = np.asarray(wave, dtype=float)
     flux = np.asarray(flux, dtype=float)
 
-    # Baseline (uses the continuum which does not remove the emission line peak)
-    c0, slope, intercept, slope_err, intercept_err = find_continuum(wave, flux)
+    # Baseline (uses the continuum which removes the emission line peak)
+    c0, slope, intercept, mask, peak_wave, slope_err, intercept_err = find_continuum_masked(wave, flux, wv_width)
     peak_wave = wave[np.argmax(flux)]
     sigma_guess = np.std(wave)
 
