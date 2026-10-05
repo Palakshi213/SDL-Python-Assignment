@@ -17,9 +17,9 @@ def power_tracker():
     """
 
     # Set initial numbers to None
-    prev_nb = None
-    max_nb_mult = None
-    min_nb_mult = None
+    prev_nb = None          # used for the exit condition
+    max_nb_mult = None      # to keep track of the maximum number encountered
+    min_nb_mult = None      # to keep track of the minimum number encountered
 
     i = 1
     exit_bool = False
