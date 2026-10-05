@@ -43,9 +43,15 @@ def parse_textfile(filename):
     """
     A function which parses a text file, separates headers from data and returns a dictionary
 
-    :param filename: A string which contains the file to parse
-    :return: result: A dictionary which contains the headers and data from a .txt file
-    :raises FileNotFoundError: If the file does not exist
+    Parameters:
+    -----------------
+   filename: A string which contains the file to parse
+
+    Return:
+    -----------------
+   result: A dictionary which contains the headers and data from a .txt file
+   raises FileNotFoundError: If the file does not exist
+
     """
 
     # Set up for the dictionary which will contain the data from .txt file
@@ -91,8 +97,14 @@ def get_spectrum(filename):
     """
     A function which extracts spectrum data (wavelength, flux) from a parsed text file, using specific headers
 
-    :param filename: A string which contains the file to parse
-    :return: wavelength, flux : Lists of floats which contains wavelength and flux data, from the spectrum
+    Parameters:
+    -----------------
+    filename: A string which contains the file to parse
+
+    Return:
+    -----------------
+
+    wavelength, flux : Lists of floats which contains wavelength and flux data, from the spectrum
     """
     # Use specific headers to extract the wavelength and flux data as lists of floats
     spectrum = parse_textfile(filename)
@@ -107,14 +119,20 @@ def find_continuum(wave, flux):
     This continuum does not mask the emission line peak
     This continuum is evaluated at all values of the wavelength range of the spectrum
 
-    :param wave: Wavelength data
-    :param flux: Flux data :
+    Parameters:
+    -----------------
+    wave: Wavelength data
+    flux: Flux data
 
-    :return: c0: The baseline continuum fit using polyfit
-    :return: slope: The slope of the linear continuum
-    :return: intercept: The intercept of the linear continuum
-    :return: slope_err: The uncertainity on the slope
-    :return: intercept_err: The uncertainity on the intercept
+    Return:
+    -----------------
+
+    c0: The baseline continuum fit using polyfit
+    slope: The slope of the linear continuum
+    intercept: The intercept of the linear continuum
+    slope_err: The uncertainity on the slope
+    intercept_err: The uncertainity on the intercept
+
     """
     # Evaluate the coefficients of the polynomial to degree = 1, y = mx+c
     # This returns the coefficients (m, c)
@@ -133,19 +151,24 @@ def find_continuum_masked(wave, flux, wv_width=10):
     """
     A function which masks the region of the emission line peak before evaluating the continuum polynomial fit
 
-    :param wave: Wavelength data (Å)
-    :param flux: Flux data (ADU)
-    :param wv_width: Peak region width along the wavelength axis
+    Parameters:
+    -----------------
+    wave: Wavelength data (Å)
+    flux: Flux data (ADU)
+    wv_width: Peak region width along the wavelength axis
 
-    :return: The continuum masked region of the emission line
-    :return: slope: The slope of the linear continuum
-    :return: intercept: The intercept of the linear continuum
-    :return: mask: The region of the emission line peak
-    :return: peak_wave: The peak wavelength
-    :return: slope_err: The uncertainity on the slope
-    :return: intercept_err: The uncertainity on the intercept
+    Return:
+    -----------------
+    The continuum masked region of the emission line
+    slope: The slope of the linear continuum
+    intercept: The intercept of the linear continuum
+    mask: The region of the emission line peak
+    peak_wave: The peak wavelength
+    slope_err: The uncertainity on the slope
+    intercept_err: The uncertainity on the intercept
+
     """
-
+    # Ensure data type is correct
     wave = np.asarray(wave, dtype=float)
     flux = np.asarray(flux, dtype=float)
 
@@ -159,8 +182,11 @@ def find_continuum_masked(wave, flux, wv_width=10):
     coeffs, covariance = np.polyfit(wave[mask], flux[mask], deg=1, cov=True)
     slope = coeffs[0]
     intercept = coeffs[1]
+
+    # Error matrix from coveriance
     slope_err, intercept_err = np.sqrt(np.diag(covariance))
 
+    # Evaluate continuum from masked spectrum
     continuum_masked = np.polyval(coeffs, wave)
 
     return continuum_masked, slope, intercept, mask, peak_wave, slope_err, intercept_err
@@ -169,12 +195,16 @@ def find_continuum_masked(wave, flux, wv_width=10):
 def gauss(x, A, mu, sigma):
     """A function which calculates the Gaussian function of data:
 
-    : param x: the x dataset (wavelength) (Å)
-    : param A: Amplitude
-    : param mu: Gaussian mean (center)
-    : param sigma: Gaussian standard deviation
+     Parameters:
+    -----------------
+    x: the x dataset (wavelength) (Å)
+    A: Amplitude
+    mu: Gaussian mean (center)
+    sigma: Gaussian standard deviation
 
-    :return: Gaussian function
+    Return:
+    -----------------
+    Gaussian function evaluated at given parameters
 
     """
     return A * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
@@ -185,18 +215,23 @@ def fit_gaussian(wave, flux, wv_width=10.0):
 
     This function which fits a Gaussian function to the emission line peak
 
-    :param wave: The wavelength data (Å)
-    :param flux: The flux data (ADU)
-    :param wv_width: The region around peak wavelength considered as the emission line peak
+    Parameters:
+    -----------------
 
-    :return: gopt:
-    :return: gcov:
-    :return: line: The Gaussian fitted line over the emission line peak
-    :return: peak_wave: Wavelength at maximum flux value
-    :return: fwhm: Full-width at half maximum
-    :return: c0: The baseline continuum
-    :return: sigma_guess: The initial parameter used for sigma, i.e. the standard deviation
-    :return: peak_region_mask: Mask indicating the peak region
+    wave: The wavelength data (Å)
+    flux: The flux data (ADU)
+    wv_width: The region around peak wavelength considered as the emission line peak
+
+    Return:
+    -----------------
+    gopt: Optimised parameters for the curve
+    gcov: Convariance matrix
+    line: The Gaussian fitted line over the emission line peak
+    peak_wave: Wavelength at maximum flux value
+    fwhm: Full-width at half maximum
+    c0: The baseline continuum
+    sigma_guess: The initial parameter used for sigma, i.e. the standard deviation
+    peak_region_mask: Mask indicating the peak region
     """
     wave = np.asarray(wave, dtype=float)
     flux = np.asarray(flux, dtype=float)
