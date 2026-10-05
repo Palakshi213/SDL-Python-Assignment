@@ -121,6 +121,7 @@ def main():
     ax.grid(True)
     plt.show()
 
+
     # Logging
     print("Gaussian fit\n------")
     print(
