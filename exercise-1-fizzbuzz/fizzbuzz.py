@@ -1,7 +1,15 @@
 
 '''
-Palakshi Rattan
+Author: Palakshi Rattan
 Date: 26/9/26
+
+Fizzbuzz is a mathematical game used to help kids learn their times tables. In
+the game, a group of people will count up from 1, replacing any multiples of
+3 by "Fizz" and any multiples of 5 by "Buzz". Numbers, such as 15,
+which are multiples of both 3 and 5 are replaced by "FizzBuzz" in the
+counting sequence
+
+
 FizzBuzz.py includes:
     1. Default Setting:
     2. Custom Setting:
@@ -14,10 +22,12 @@ import argparse
 
 def fizzbuzz(num_range, rules):
     '''
+
     numberRange: range of numbers, used when the user tells us max number
     rules: Default or Custom, this will include the custom word and replacement
 
     Variables:
+    ___________
     factor: number to replace input from user (divisor)
     repWord: replacement word input from user
     '''
@@ -59,49 +69,89 @@ def makeRules(num_str, words_str):
     # "Fresh,Juice" -> ["Fresh", "Juice"]
     words = [w.strip() for w in words_str.split(",")]
 
+    try:
+        numbers = [int(n) for n in numbers]
+    except ValueError:
+        raise ValueError("numbers must be whole numbers, e.g. 4,6")
+
+    if any(n < 1 for n in numbers):
+        raise ValueError("numbers must be at least 1 (0 would divide by zero)")
+    if len(set(numbers)) != len(numbers):
+        raise ValueError("each number can only be used once")
+    if len(numbers) != len(words):
+        raise ValueError(f"you gave {len(numbers)} number(s) but "
+                         f"{len(words)} word(s); they must match")
+
     return list(zip(numbers, words))
 
 def askUser(default_max, default_rules):
     print("Starting FizzBuzz Game:")
-
+    print(" Default Rules: Replace 3,5 respectively with 'Fizz' and 'Buzz' \n Extended Rules: Replace 3,5 respectively with 'Fizz' and 'Buzz' AND replace 7,11 respectively with 'Fang' and 'Bang' \n Custom Rules: Allow you to set your own rules \n " )
+    print("If there is no input or an error, then Default Rules will be used (press Enter) \n")
     mode = input("Use default rules, extended version, or custom? [default/extended/custom]: ").strip().lower()
 
-    print(f"How high would you like to count? (leave blank for {default_max}): ")
-    max_str = input("Max number: ").strip()
-    max_number = int(max_str) if max_str else default_max
+    max_number = askPos(
+        f"How high would you like to count? (leave blank for {default_max}): ",
+        default_max,
+    )
 
-    if mode not in ("custom", "extended"):
+    if mode.startswith("e"):
+        return max_number, extended()
+    if not mode.startswith("c"):
         return max_number, default_rules()
 
-    if mode == "extended":
-        return max_number, extended()
+    # Custom rules: re-ask until valid; blank numbers falls back to defaults
+    while True:
+        print("Enter the numbers to replace separated by comma.")
+        print("Example: 4,6   (leave blank to use the default rules)")
+        numbers_str = input("Numbers: ").strip()
+        if not numbers_str:
+            print("No numbers entered, using default rules.")
+            return max_number, default_rules()
 
-    # Only "custom" reaches here — ask the remaining questions in order.
-    print("Enter the numbers to replace separated by comma.")
-    print("Example: 4,6")
-    numbers_str = input("Numbers: ").strip()
+        print("Enter the matching words to replace numbers, separated by commas.")
+        print("Example: Banana, Apple")
+        words_str = input("Words: ").strip()
 
-    print("Enter the matching words to replace numbers, separated by commas.")
-    print("Example: Banana, Apple")
-    words_str = input("Words: ").strip()
-
-    try:
-        rules = makeRules(numbers_str, words_str)
-    except ValueError as e:
-        print(f"Error: {e}")
-        print("Default rules.")
-        rules = default_rules()
-
-    return max_number, rules
+        try:
+            return max_number, makeRules(numbers_str, words_str)
+        except ValueError as e:
+            print(f"Error: {e}. Please try again.\n")
 
 def formatOutput(results):
     for i, value in enumerate(results):
         print(f"{i+1}. {value}")
 
+def checkPos(num):
+    """argparse type: accept only whole numbers >= 1."""
+    try:
+        value = int(num)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{num!r} is not a whole number")
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {value}")
+    return value
+
+def askPos(ask, default_value):
+    """Ask until the user gives a whole number >= 1. Blank returns the default."""
+    while True:
+        raw = input(ask).strip()
+        if not raw:
+            return default_value
+        try:
+            value = int(raw)
+        except ValueError:
+            print(f"{raw!r} is not a whole number. Please try again.")
+            continue
+        if value < 1:
+            print("The number must be at least 1. Please try again.")
+            continue
+        return value
+
          
 def main():
     parser = argparse.ArgumentParser(description="Play FizzBuzz with default, extended, or custom rules.")
-    parser.add_argument("--max", type=int, default=100, help="Max number to count to (default: 100)")
+    parser.add_argument("--max", type=checkPos, default=100, help="Max number to count to (default: 100)")
     parser.add_argument(
         "--mode",
         choices=["default", "extended", "custom"],
@@ -125,7 +175,7 @@ def main():
         again = input("\nPlay again? [y/n]: ").strip().lower()
         play_again = again.startswith("y")
 
-    print("Ending Fizzbuzz!")
+    print("Ending Fizzbuzz")
 
 
 if __name__ == "__main__":
