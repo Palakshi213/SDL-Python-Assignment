@@ -82,8 +82,8 @@ def main():
     fig, ax = plt.subplots(figsize=(12, 6))
     ax.plot(wavelength, flux, c="#EB5959", lw=0.7, label=f"Spectrum\nPeak wave at: {peak_wave:.2f} Å")
     ax.plot(wavelength, continuum_masked, c="b", lw=2, label=f"Continuum\n\
-    Slope={slope_masked:.3f} ADU/Å - uncertainity: {slope_err_masked:.3f}\n\
-    Intercept={intercept_masked:.3f} ADU -  uncertainity: {intercept_err_masked:.3f}")
+    Slope={slope_masked:.3f} ADU/Å - Uncertainity: {slope_err_masked:.3f}\n\
+    Intercept={intercept_masked:.3f} ADU -  Uncertainity: {intercept_err_masked:.3f}")
     ax.set_title("Wavelength v. Flux Spectrum - 1st order fit ignoring emission line peak")
     ax.set_xlabel("Wavelength (Å)")
     ax.set_ylabel("Flux (ADU)")
