@@ -11,3 +11,10 @@
 
 # Virtual environment folders
 venv/
+.venv
+
+# WSL-related files
+Zone.Identifier
+
+# Pycache-related
+_pycache_
