@@ -17,7 +17,7 @@ Assignment_2/
 └── README.md
 ```
 
-All paths in the notebooks are relative to `Assignment_2/`, so they can be run without changing any paths.
+All paths in the notebooks are relative to `..`, so they can be run without changing any paths.
 
 
 ## Part 1: HST Calibration Routine
