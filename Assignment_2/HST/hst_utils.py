@@ -10,16 +10,18 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 from pathlib import Path
 
-def open_fits_file(file_path):
+def open_fits_file(file_path, secondary_header=False):
     """
     Return the primary header and the image data of a FITS file.
 
     The data is either in extension 0 (most calibration files), in
     extension 1 (raw file), or split with one chip per extension (some
     BLEVFILEs). The returned data always has the shape (chip, y, x).
+    If secondary_header is set to True, the 1st & 2nd header are returned: ((header1, header2), data)
     """
     with fits.open(file_path) as hdul:
         header = hdul[0].header.copy()
+        header2 = hdul[1].header.copy()
         if hdul[0].data is not None:
             data = hdul[0].data
         elif len(hdul) == 2:
@@ -29,7 +31,10 @@ def open_fits_file(file_path):
             for i in range(1, len(hdul)):
                 chips.append(hdul[i].data)
             data = np.array(chips)
-    return header, data
+    if secondary_header:
+        return (header,header2), data 
+    else:
+        return header, data
 
 def load_calibration_files(exposure_dir):
     """
@@ -37,12 +42,13 @@ def load_calibration_files(exposure_dir):
     file type, e.g. 'raw', 'maskfile', 'blevfile', ...
 
     Each value is a (header, data) tuple from open_fits_file().
+    For the raw file, 1st & 2nd header are returned: ((header1, header2), data)
     """
     exposure_dir = Path(exposure_dir)
     files = {}
     for file_path in sorted(exposure_dir.glob('*.fits')):
         file_type = file_path.stem.split('_')[-1]
-        files[file_type] = open_fits_file(file_path)
+        files[file_type] = open_fits_file(file_path, secondary_header=False)
     return files
 
 def normalize_image(x, pmin=1, pmax=99, clip=False):
