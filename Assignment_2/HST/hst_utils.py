@@ -10,6 +10,28 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 from pathlib import Path
 
+photometry_tables = {
+    "F336W": {
+        "PHOTMODE": "WFPC2,1,A2D15,F336W,,CAL",
+        "PHOTFLAM": 1.115396e-16,
+        "PHOTZPT": -21.1,
+        "PHOTPLAM": 3359.474,
+        "PHOTBW": 204.4908,
+        "ZP_CORR": -0.03288031
+    },
+    "F555W": {
+        "PHOTMODE": "WFPC2,1,A2D15,F555W,,CAL",
+        "PHOTFLAM": 6.920538e-18,
+        "PHOTZPT": -21.1,
+        "PHOTPLAM": 5442.934,
+        "PHOTBW": 522.2513,
+        "ZP_CORR": 0.02655506
+    }
+}
+
+EXPTIME = 700
+
+
 def open_fits_file(file_path, secondary_header=False):
     """
     Return the primary header and the image data of a FITS file.
