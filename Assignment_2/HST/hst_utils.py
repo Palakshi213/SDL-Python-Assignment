@@ -18,6 +18,15 @@
 11. plot_correction(before, correction, after, titles, chip=0)
 12. remove_dark(raw_data_bias_corrected, dark_data, dark_time)
 13. correct_flatfield(raw_data_dark_corrected, flat_data)
+14.
+15.
+16.
+17. filter_mad(sample, threshold=3):
+18. correct_sky
+19. calibrated_magnitudes(corrected_data, dpc)
+20. aligned_magnitudes(corrected_data, dpc)
+21. compare_magnitudes(corrected_data, dpc)
+
 
 """
 
@@ -187,6 +196,7 @@ def print_statistics(data, name="Data"):
     Print the mean, median, standard deviation, min and max of each chip.
     NaN-safe functions are used because the masked pixels are NaN.
     """
+    print("------------------------ ")
     print(f"{name} statistics: ")
     for chip in range(data.shape[0]):
         print(
@@ -301,20 +311,9 @@ def correct_flatfield(raw_data_dark_corrected, flat_data):
     raw_data_flat_corrected = raw_data_dark_corrected * flat_data
     return raw_data_flat_corrected
 
-# def correct_sky(data, sigma=3, maxiters=5):
-#     sky = np.empty(data.shape[0])
-#     sky_bkg = np.empty(data.shape[0])
-#
-#     for chip in range(data.shape[0]):
-#         values = data[chip][np.isfinite(data[chip])]
-#         _, sky[chip], sky_bkg [chip] = sigma_clipped_stats(values, sigma=sigma, maxiters=maxiters,
-#                                                             cenfunc='median', stdfunc='mad_std')
-#
-#     return data - sky[:, np.newaxis, np.newaxis], sky, sky_noise
-
 def spectral_flux(data):
     """
-        Calculate the spectral flux from calibrated data
+    Calculate the spectral flux from calibrated data
     """
     counts_per_sec = data / EXPTIME
     flux = counts_per_sec * photometry_tables["PHOTFLAM"]
@@ -337,5 +336,131 @@ def get_abs_mag(dpc, app_mag):
     """
     return app_mag + 5 - 5 * np.log10(dpc)
 
+def calibrated_magnitudes(corrected_data, dpc):
+    flux = spectral_flux(corrected_data)
+    app_mag = get_appmag(flux)
+    abs_mag = get_abs_mag(dpc, app_mag)
+
+    return flux, app_mag, abs_mag
+
+def aligned_magnitudes(data_file, dpc=DPC, exptime=EXPTIME, counts_per_second=False):
+    """
+    Load an aligned FITS file and return (flux, apparent_mag, absolute_mag).
+
+    counts_per_second: set True if BUNIT says the data are already rates,
+                       so the exposure-time division is skipped.
+    """
+    with fits.open(data_file) as hdul:
+        data = hdul[1].data.astype(float)
+        # bunit = hdul[1].header.get("BUNIT", hdul[0].header.get("BUNIT", "unknown"))
+
+    rate = data if counts_per_second else data / exptime
+    flux = rate * photometry_tables["PHOTFLAM"]  # erg / s / cm^2 / Angstrom
+
+    app_mag = get_appmag(flux)  # NaN where flux <= 0
+    abs_mag = get_abs_mag(dpc, app_mag)
+
+    return flux, app_mag, abs_mag
+
+def compare_mags(calibrated, aligned, chip=0, mag_index=1, label="m (STMAG)"):
+    """
+    Compare magnitudes from my calibration with those from the aligned file.
+
+    calibrated, aligned : tuples (flux, app_mag, abs_mag)
+    chip      : chip of the (4, rows, cols) calibrated array that matches the aligned image
+    mag_index : 1 = apparent, 2 = absolute (differences are identical)
+
+    Returns (fig, stats); stats["diff_image"] is mine - reference.
+    """
+    mine = np.asarray(calibrated[mag_index], dtype=float)
+    ref = np.asarray(aligned[mag_index], dtype=float)
+    if mine.ndim == 3:
+        mine = mine[chip]
+
+    both = np.isfinite(mine) & np.isfinite(ref)
+
+    diff = np.full_like(mine, np.nan)
+    diff[both] = mine[both] - ref[both]
+    d = diff[both]
+
+    stats = {
+        "mean": float(d.mean()),
+        "median": float(np.median(d)),
+        "std": float(d.std()),
+        "robust_std": float(1.4826 * np.median(np.abs(d - np.median(d)))),
+        "diff_image": diff,
+    }
+
+    print(f"diff (mine - ref): mean {stats['mean']:+.4f}, median {stats['median']:+.4f}, "
+          f"std {stats['std']:.4f}, robust std {stats['robust_std']:.4f}")
+
+    fig, axes = plt.subplots(1, 4, figsize=(26, 6), tight_layout=True)
+
+    vmin, vmax = np.nanpercentile(ref, [1, 99])
+    for ax, img, title in zip(axes[:2], (mine, ref),
+                              (f"My calibrated (chip {chip})", "Aligned reference")):
+        im = ax.imshow(img, origin="lower", cmap="plasma_r", vmin=vmin, vmax=vmax)
+        ax.set_title(title)
+        fig.colorbar(im, ax=ax, fraction=0.046, label=label)
+
+    lim = np.nanpercentile(np.abs(d), 99)
+    im = axes[2].imshow(diff, origin="lower", cmap="RdBu_r", vmin=-lim, vmax=lim)
+    axes[2].set_title("Mine - reference")
+    fig.colorbar(im, ax=axes[2], fraction=0.046, label="Delta mag")
+
+    h, e = np.histogram(d, bins=np.linspace(-lim, lim, 201))
+    axes[3].plot(0.5 * (e[:-1] + e[1:]), np.where(h > 0, h, np.nan))
+    axes[3].axvline(stats["median"], color="r", ls="--", label=f"median {stats['median']:+.3f}")
+    axes[3].set_yscale("log")
+    axes[3].set_xlabel("Mine - reference (mag)")
+    axes[3].set_ylabel("pixels")
+    axes[3].set_title(f"Differences: std {stats['std']:.3f}, robust {stats['robust_std']:.3f}")
+    axes[3].legend()
+
+    return fig, stats
+
+def filter_mad(corrected_data, thresh=3):
+    """
+    Flag values more than `thresh` robust standard deviations above the median.
+    Robust std = 1.4826 * MAD.
+    Returns a boolean mask, True where a value is flagged.
+    """
+    median = np.nanmedian(corrected_data)
+    mad = np.nanmedian(np.abs(corrected_data - median))
+    stddev = 1.4826 * mad
+
+    flag = (corrected_data - median) / stddev > thresh
+    print(f"MAD thresholding produced {flag.sum()} values above the threshold")
+    return flag
+
+def get_sky(corrected_data):
+    skies = []
+    for chip in range(corrected_data.shape[0]):
+
+        flag = filter_mad(corrected_data[chip], 3)
+
+        masked = np.ma.masked_array(corrected_data[chip],mask=flag | np.isnan(corrected_data[chip]))
 
 
+        skies.append(np.ma.median(masked))
+
+    return np.array(skies)
+
+# def correct_sky(corrected_data, thresh=3):
+#     sky = []
+#     sky_corrected = np.full_like(corrected_data, np.nan, dtype=float)
+#
+#     for chip in range(corrected_data.shape[0]):
+#         data = corrected_data[chip]
+#
+#         flag = filter_mad(data, thresh)
+#         masked = np.ma.masked_array(data, mask=flag | np.isnan(data))
+#
+#         chip_sky = float(np.ma.median(masked))
+#         sky.append(chip_sky)
+#         sky_corrected[chip] = data - chip_sky
+#
+#     sky = np.array(sky)                                   # list -> array so it can be indexed
+#     sky_image = np.broadcast_to(sky[:, None, None], corrected_data.shape)
+#
+#     return sky_corrected, sky, sky_image

@@ -22,6 +22,8 @@ All paths in the notebooks are relative to `..`, so they can be run without chan
 
 ## Part 1: HST Calibration Routine
 
+There was a choice to run all calibration in the main.py so all output images are obtained 
+
 ### 1. Mask invalid data with `MASKFILE`
 The mask indicates all bad pixels as follows:
  - 0 represents a valid pixels
@@ -125,10 +127,20 @@ Calibration steps:
         Where $\log(d_{pc})$ is the distance to the star in parsecs.
         **Assumtion**: the given image shows the **NGC1261** cluster, at a distance of $16.4pc$ 
 
-### 9. Removing the Sky Contribution Using Sigma Clipping 
+### 9. Removing the Sky Contribution Using MAD Sigma Clipping 
+
+The 'sky' refers to the 
+
+Because sky computation is performed on flat-fielded but not distortion corrected images, it is important to keep in mind that flat-fielding is performed to obtain correct 
+surface brightnesses. Because the surface brightness of a pixel containing a point-like source will change inversely with a change to the pixel area, it is advisable to mask point-like sources through user-supplied mask files. 
+
+Source: https://jwst-pipeline.readthedocs.io/en/1.18.x/jwst/skymatch/description.html
+
+explain MAD sigma clipping in this context and how to do it for the flat field corrected data so as to include in a read me file 
+those pixels are flagged as outliers: cosmic rays, hot pixels, and also real stars and other bright sources.
 
 
 
-
+Faint pixels will have a large scatter because magnitude differences blow up near zero flux,
 
 ## Part 2: HST Calibration Routine

@@ -21,6 +21,11 @@ from Assignment_2.HST.hst_utils import (
     plot_correction,
     remove_dark,
     correct_flatfield,
+    correct_sky,
+    DPC,
+    aligned_magnitudes,
+    calibrated_magnitudes,
+    compare_mags,
     )
 
 #import Assignment_2.HST.hst_utils as utils
@@ -33,8 +38,8 @@ def main():
     ubai2507m = load_calibration_files(calib_dir / "ubai2507m")
     ubai2508m = load_calibration_files(calib_dir / "ubai2508m")
 
-    exposure = ubai2507m
-    exposure_name = "ubai2027m"
+    exposure = ubai2505m
+    exposure_name = "ubai2505m"
 
     out_dir = Path("calibration_plots")
     out_dir.mkdir(exist_ok=True)
@@ -68,11 +73,13 @@ def main():
     raw_data_bias_corrected = remove_bias_image(raw_data_blev_corrected, bias_data)
     raw_data_dark_corrected = remove_dark(raw_data_bias_corrected, dark_data, dark_time)
     raw_data_flat_corrected = correct_flatfield(raw_data_dark_corrected, flat_data)
+    # raw_data_sky_corrected, sky, sky_image = correct_sky(raw_data_flat_corrected)
 
     # -------------------------------------
 
     # Plot the maskfile on top of the rawfile, clearly highlighting the masked pixels.
     # A second plot zooms on the area where there are some bad columns.
+
     chip = 0
     raw_image = transform_by("sqrt", raw_data[chip], pmin=1, pmax=99)
 
@@ -105,39 +112,30 @@ def main():
     plt.close(fig)
     # -------------------------------------
 
+    # -------------------------------------
+    # Compare Magnitudes
+
     print("------------------------ ")
     print("Raw Data Masked:")
     for chip in range(raw_data_masked.shape[0]):
         print(f"Chip {chip}: {np.sum(np.isnan(raw_data_masked[chip]))} pixels set to NaN")
 
     # Only the overscan columns are pixel data (column 0 and 1 are not)
-    print("\n------------------------ ")
     print_statistics(blev_data[:, :, 7:12:2], name="Blev overscan even columns")
-    print("------------------------ ")
     print_statistics(blev_data[:, :, 8:13:2], name="Blev overscan odd columns")
 
     # Statistics before and after the bias correction
-    print("------------------------ ")
     print_statistics(raw_data_masked, name="Masked data")
-    raw_data_blev_corrected = remove_bias_level(raw_data_masked, blev_data)
-    print("------------------------ ")
+    # raw_data_blev_corrected = remove_bias_level(raw_data_masked, blev_data)
     print_statistics(raw_data_blev_corrected, name="Bias corrected")
 
-    # Logging
-    print("------------------------ ")
-    print_statistics(raw_data_bias_corrected, name="Bias corrected")
-    print("------------------------ ")
-    print_statistics(dark_data * dark_time, name=f"Dark data * darktime({dark_time}s)")
-    print("------------------------ ")
-    print_statistics(raw_data_dark_corrected, name="Dark corrected")
 
-    # Logging
-    print("------------------------ ")
-    print_statistics(raw_data_bias_corrected, name="Dark corrected")
-    print("------------------------ ")
+    print_statistics(raw_data_bias_corrected, name="Bias corrected")
+    print_statistics(dark_data * dark_time, name=f"Dark data * darktime({dark_time}s)")
+    print_statistics(raw_data_dark_corrected, name="Dark corrected")
     print_statistics(flat_data, name="Flatfield data")
-    print("------------------------ ")
-    print_statistics(raw_data_dark_corrected, name="Flatfield corrected")
+    print_statistics(raw_data_flat_corrected, name="Flatfield corrected")
+    # print_statistics(raw_data_sky_corrected, name="Sky corrected")
 
     # Correction Plots
 
@@ -170,6 +168,21 @@ def main():
     fig.suptitle(f"Flatfield correction: {exposure_name}")
     fig.savefig(out_dir / f"{exposure_name}_FlatField.png", dpi=200, bbox_inches="tight")
     plt.close(fig)
+
+    # # Sky Plot
+    # fig = plot_correction(
+    #     raw_data_flat_corrected,
+    #     sky_image,
+    #     raw_data_sky_corrected,
+    #     ["Flatfield corrected", "Sky Contribution", "Sky corrected"],
+    # )
+    # fig.suptitle(f"Sky correction: {exposure_name}")
+    # fig.savefig(out_dir / f"{exposure_name}_Sky.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+    # -------------------------------------
+    # Compare Magnitudes
+
 
 if __name__ == "__main__":
     main()
