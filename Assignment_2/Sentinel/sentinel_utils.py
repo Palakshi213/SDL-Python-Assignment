@@ -1,32 +1,8 @@
 # !/usr/bin/env python 3
 # sentinel_utils.py
+# Author: Palakshi RATTAN
 
 # Contains all helper functions for the Sentinel-2 part of the assignment
-
-"""
-1. find_files_by_year(data_dir)
-2. get_band_file(files, band, index_fallback=None)
-3. read_band(file)
-4. print_raster_metadata(file)
-5. pretty_stats(image_data)
-6. make_ndi(band1, band2, band3=None)
-7. angular_pixel_calculation(file)
-8. pixel_conversion(file, pixels)
-9. compute_ndvi(files_by_year)
-10. plot_ndvi(ndvi)
-11. count_vegetation(ndvi, files_by_year, thresh)
-12. plot_vegetation_area(veg_area)
-13. read_pipeline_rgb(files)
-14. plot_pipeline_comparison(ndvi, files_by_year)
-15. compare_ndvi_masks(files_by_year, ndvi_thresh, margin)
-16. load_b12(files)
-17. normalise_b12(b12)
-18. remove_small_objects(mask, min_size, connectivity, fill_holes)
-19. build_land_masks(files_by_year, z_thresh, min_size_by_year)
-20. plot_land_masks(b12_raw, land_masks, n_land)
-21. land_area_over_time(n_land, files_by_year)
-22. vegetation_fraction(veg_counts, land_counts, files_by_year)
-"""
 
 # Packages import
 import numpy as np
@@ -185,9 +161,7 @@ def plot_vegetation_area(veg_area):
     return fig
 
 
-# ----------------------------------------------------------------------
 # Comparison with the supplied NDVI (pipeline) files
-# ----------------------------------------------------------------------
 
 def read_pipeline_rgb(files):
     """Read the supplied *_NDVI.tiff as an (h, w, 3) float RGB image."""
@@ -200,8 +174,8 @@ def compare_ndvi_masks(files_by_year, ndvi_thresh=0.12, margin=PIPELINE_MARGIN):
     """
     Compare my NDVI vegetation mask (NDVI >= ndvi_thresh) with the pipeline
     mask (green exceeds red and blue by `margin`) for each year.
-    Returns (fig, rows, diffs): rows is a list of dicts (one per year) and
-    diffs is {year: difference image} (+1 only mine, -1 only pipeline, 0 agree).
+    Returns (fig, rows, diffs):
+
     """
     years = sorted(files_by_year)
     rows = []

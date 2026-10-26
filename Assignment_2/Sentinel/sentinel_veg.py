@@ -5,8 +5,6 @@ import matplotlib.pyplot as plt
 from sentinel_utils import (
     find_files_by_year,
     get_band_file,
-    pretty_stats,
-    read_band,
     compute_ndvi,
     plot_ndvi,
     count_vegetation,
@@ -39,7 +37,6 @@ def main():
         print(year)
         for f in files:
             print("   ", f.name)
-
 
     # Pixel size of each year
     for year, files in files_by_year.items():

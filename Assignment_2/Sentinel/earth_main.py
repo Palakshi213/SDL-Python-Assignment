@@ -59,6 +59,7 @@ def main():
     print("\nImages analysed:", [p.stem for p in white_images])
 
     # Pixel size from the scale bar: summary table
+
     print()
     bar_results, pixel_area_m2 = scale_bar_table(white_images)
 
@@ -78,6 +79,7 @@ def main():
     fig.savefig(out_dir / "LandArea.png", dpi=200, bbox_inches="tight")
     plt.close(fig)
 
+    print("\n Images saved in:", out_dir.resolve())
 
 if __name__ == "__main__":
     main()

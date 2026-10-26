@@ -1,8 +1,8 @@
 #earth_utils.py
 # Helper functions for Part 2 of the assignment (Hunga Tonga, Sentinel-2 images)
-
+# Author: Palakshi RATTAN (and using functions used in the Lab Workbooks) #
 """
-Contents
+Functions
 --------
 Loading
     1. load_white_light_files(folder)
@@ -39,6 +39,7 @@ IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
 
 # Scale bar label for each image, in metres. Check each image by eye!
 # Any file not listed here falls back to DEFAULT_BAR_M.
+
 SCALE_BAR_M = {
     # "your_filename_stem": 600,
 }
@@ -60,10 +61,6 @@ RED_THRESH = {
 
 # Images that are not used in the analysis
 EXCLUDE = {"2021Dec"}
-
-# ----------------------------------------------------------------------
-# Loading
-# ----------------------------------------------------------------------
 
 def load_white_light_files(folder):
     """Return {file_stem: uint8 RGB array (rows, cols, 3)} for every image in folder."""
@@ -97,10 +94,11 @@ def select_images(folder, exclude=EXCLUDE):
 
 # ----------------------------------------------------------------------
 # Scale bar / pixel size
-# ----------------------------------------------------------------------
+
 
 def longest_run(row):
-    """Longest run of True in a 1D boolean array -> (length, start, end)."""
+    """Longest run of True in a 1D boolean array to find the length, start, end """
+
     padded = np.concatenate([[0], row.astype(np.int8), [0]])
     edges = np.diff(padded)
     starts, ends = np.where(edges == 1)[0], np.where(edges == -1)[0]
@@ -119,7 +117,7 @@ def measure_scale_bar(img, bottom_frac=0.15, thresh=200, min_len=20):
     y0 = int((1 - bottom_frac) * h)
     bright = img[y0:].min(axis=-1) > thresh        # all of R, G, B bright
 
-    best = (0, None, None, None)
+    best = (0, None, None, None) # For some images, there are multiple runs. THis part is largely unused since discarding 2021DEC as there were many bright white lines
     for r, row in enumerate(bright):
         length, xs, xe = longest_run(row)
         if length > best[0]:
@@ -131,12 +129,8 @@ def measure_scale_bar(img, bottom_frac=0.15, thresh=200, min_len=20):
 
 def find_scale_bar(img, bottom_frac=0.15, thresh=200, min_len=20):
     """
-    Return ([(length_px, x_start, x_end), ...], y0): the distinct bright
-    horizontal runs in the bottom strip, longest first (the bar is the first).
+    Return the distinct bright horizontal runs in the bottom strip, longest first (the bar is the first).
     y0 is the first row of the strip.
-
-    NOTE: this function was called in the notebook but never defined there;
-    this is a reconstruction consistent with how it was used.
     """
     h = img.shape[0]
     y0 = int((1 - bottom_frac) * h)
@@ -151,7 +145,7 @@ def find_scale_bar(img, bottom_frac=0.15, thresh=200, min_len=20):
 
 
 def show_detection(name, img, result, bottom_frac=0.15):
-    """Plot the bottom strip of img with the detected scale bar in red."""
+    """Plot the bottom strip of img with the detected scale bar in red. This just retirns cropped iamges"""
     length, row, xs, xe = result
     h = img.shape[0]
     y0 = int((1 - bottom_frac) * h)
@@ -213,9 +207,6 @@ def scale_bar_table(paths, scale_bar_m=SCALE_BAR_M, default_bar_m=DEFAULT_BAR_M)
     return results, pixel_area_m2
 
 
-# ----------------------------------------------------------------------
-# Colour indices
-# ----------------------------------------------------------------------
 
 def norm_diff(a, b):
     """Normalised difference (a - b) / (a + b), range -1..1."""
