@@ -1,6 +1,6 @@
 # earth_main.py
 # Part 2 of the assignment: Hunga Tonga analysis from Google Earth images.
-# All functions live in earth_utils.py.
+# All functions are found in earth_utils.py.
 
 from pathlib import Path
 
