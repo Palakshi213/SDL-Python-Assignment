@@ -1,201 +1,202 @@
 # !/usr/bin/env python 3
 # hst_utils.py
-# Author: Martin CLOTUCHE and Palakshi RATTAN#
+# Author: Martin CLOTUCHE and Palakshi RATTAN (also using functions used in the Lab Workbooks) #
 
 # Contains all helper functions for the Part 1 of the assignment $
 
-""""
-1. open_fits_file(file_path, secondary_header=False)
-2. load_calibration_files(exposure_dir)
-3. normalize_image(x, pmin, pmax)
-4. transform_by(func, x, pmin, pmax)
-5. plot_calibration_files(files, chip=0, title=None)
-6. print_statistics(data, name="Data")
-7. mask_invalid_data(raw_data, mask_data)
-8. mask_statistics(files, exposure_name=None)
-9. remove_bias_level(raw_data_masked, blev_data)
-10. remove_bias_image(raw_data_blev_corrected, bias_data)
-11. plot_correction(before, correction, after, titles, chip=0)
-12. remove_dark(raw_data_bias_corrected, dark_data, dark_time)
-13. correct_flatfield(raw_data_dark_corrected, flat_data)
-14.
-15.
-16.
-17. filter_mad(sample, threshold=3):
-18. correct_sky
-19. calibrated_magnitudes(corrected_data, dpc)
-20. aligned_magnitudes(corrected_data, dpc)
-21. compare_magnitudes(corrected_data, dpc)
+"""
+hst_utils.py
+============
+Functions and constants for calibrating raw HST exposures
+(F336W, ubai25xxm) and comparing them with the science-ready images .
 
-
+Calibration order (stars + noise = (raw - bias - dark) * flat - sky):
+    mask -> bias level (BLEVFILE) -> bias image -> dark -> flat -> remove sky
 """
 
-# Packages import
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
-from pathlib import Path
-from matplotlib.colors import Normalize
 
-photometry_tables = {
-        "PHOTMODE": "WFPC2,1,A2D15,F336W,,CAL",
-        "PHOTFLAM": 1.115396e-16,
-        "PHOTZPT": -21.1,
-        "PHOTPLAM": 3359.474,
-        "PHOTBW": 204.4908,
-        "ZP_CORR": -0.03288031
+# Constants
+
+DPC = 16.4e3  # distance in parsec
+
+CAL_TYPES = ["raw", "maskfile", "blevfile", "biasfile", "darkfile", "flatfile"]
+MASK_CODES = {"valid": 0, "defective": 2, "questionable": 256}
+
+# Photometry tables used for the F336W Files
+PHOTOMETRY = {
+    "PHOTMODE": "WFPC2,1,A2D15,F336W,,CAL",
+    "PHOTFLAM": 1.115396e-16,   # erg/cm2/s/A per (DN/s)
+    "PHOTZPT": -21.1,           # STMAG zero point
+    "PHOTPLAM": 3359.474,
+    "PHOTBW": 204.4908,
+    "ZP_CORR": -0.03288031,
 }
 
-EXPTIME = 700
-DPC = 16.4e3
+# --------------------------------------------------------------------------
+# Loading files
 
-def open_fits_file(file_path, secondary_header=False):
+def open_fits_file(filename):
     """
-    Return the primary header and the image data of a FITS file.
+    Return (primary_header, data) where data is a (4, y, x) float stack.
 
-    The data is either in extension 0 (most calibration files), in
-    extension 1 (raw file), or split with one chip per extension (some
-    BLEVFILEs). The returned data always has the shape (chip, y, x).
-    If secondary_header is set to True, the 1st & 2nd header are returned: ((header1, header2), data)
+    Uses the first HDU holding a 3D array with first dimension 4. If none
+    exists (some BLEVFILEs have one 2D chip per extension), the four 2D
+    extensions are stacked instead.
     """
-    with fits.open(file_path) as hdul:
+    with fits.open(filename) as hdul:
         header = hdul[0].header.copy()
-        header2 = hdul[1].header.copy()
-        if hdul[0].data is not None:
-            data = hdul[0].data
-        elif len(hdul) == 2:
-            data = hdul[1].data
-        else:
-            chips = []
-            for i in range(1, len(hdul)):
-                chips.append(hdul[i].data)
-            data = np.array(chips)
-    if secondary_header:
-        return (header,header2), data 
-    else:
-        return header, data
+        for hdu in hdul:
+            if (isinstance(hdu.data, np.ndarray) and hdu.data.ndim == 3
+                    and hdu.data.shape[0] == 4):
+                return header, hdu.data.astype(float)
 
-def load_calibration_files(exposure_dir):
-    """
-    Load every FITS file of one exposure folder into a dict keyed by
-    file type, e.g. 'raw', 'maskfile', 'blevfile', ...
+        chips = [hdu.data.astype(float) for hdu in hdul
+                 if isinstance(hdu.data, np.ndarray) and hdu.data.ndim == 2]
+        if len(chips) == 4:
+            return header, np.array(chips)
 
-    Each value is a (header, data) tuple from open_fits_file().
-    For the raw file, 1st & 2nd header are returned: ((header1, header2), data)
+    raise ValueError(f"No 4-chip image stack found in {filename}")
+
+
+def load_calibration_files(exposure_name, root=".", verbose=True):
     """
-    exposure_dir = Path(exposure_dir)
-    files = {}
-    for file_path in sorted(exposure_dir.glob('*.fits')):
-        file_type = file_path.stem.split('_')[-1]
-        files[file_type] = open_fits_file(file_path, secondary_header=False)
-    return files
+    Find and load the raw file and all calibration files of one exposure.
+
+    Parameters
+    ----------
+    exposure_name : str
+         Files are named <exposure_name>_<type>.fits.
+    root : str or Path
+        Folder searched
+
+    Returns
+    -------
+    dict keyed by CAL_TYPES, each value (primary_header, data (4, y, x)).
+    """
+    exposure = {}
+    for name in CAL_TYPES:
+        matches = sorted(Path(root).rglob(f"{exposure_name}_{name}.fits"))
+        if not matches:
+            raise FileNotFoundError(
+                f"{exposure_name}_{name}.fits not found under {Path(root).resolve()}")
+        exposure[name] = open_fits_file(matches[0])
+        if verbose:
+            print(f"{name:9s} {matches[0]}  shape {exposure[name][1].shape}")
+    return exposure
+
 
 def normalize_image(x, pmin=1, pmax=99, clip=False):
     """
-    AUTHOR: Dr Andrew Kirwan
-    Normalize data between 0 and 1, optionally clipping the original data
-    between user-specified min/max values, or percentiles
-
-    Parameters:
-    -----------
-    x: np.ndarray
-        The data to normalize
-    pmin: float or int
-        the lower percentile to use for normalization
-    pmax : float or int
-        the upper percentile to use for normalization
-
-    Returns:
-    -----------
-    norm: np.ndarray
-        the normalized data in the interval [0, 1]
+    Normalize data to 0-1 using percentiles (NaN-safe).
+    AUTHOR: Dr Andrew Kirwan (NaN-safe version)
     """
-
-    # copy and cast to float to be safe
     res = np.asarray(x, dtype=float)
-    vmin, vmax = np.percentile(res, [pmin, pmax])
-
-    # scale relative to vmin and vmax
+    vmin, vmax = np.nanpercentile(res, [pmin, pmax])
+    if vmax == vmin:
+        vmax = vmin + 1e-12
     norm = (res - vmin) / (vmax - vmin)
-
     if clip:
         norm = np.clip(norm, 0, 1)
-
     return norm
 
 
 def transform_by(func, x, pmin=1, pmax=99):
     """
+    Stretch the data by 'linear', 'sqrt' or 'log' after percentile normalization.
     AUTHOR: Dr Andrew Kirwan
-    Transform/stretch the data by a named function,
-    normalizing the data using given percentiles
-
-    For log stretches, we typically like to use a non-linear
-    scaling parameter `a` to highlight contrast in the image:
-
-        y = log10 (1 + a * x_norm) / log10(1 + a)
-
-    Parameters:
-    -----------
-    func: str
-        one of 'linear', 'sqrt' or 'log'
-    x: np.ndarray
-        data to transform
-    pmin : float or int
-        lower percentile
-    pmax : float or int
-        upper percentile
-    Returns:
-    ----------
-    res : `np.array`
-        the stretched data
     """
-
     x_norm = normalize_image(x, pmin=pmin, pmax=pmax, clip=True)
-
     if func == "sqrt":
         return np.sqrt(x_norm)
-    elif func == "log":
+    if func == "log":
         scale = 1000
-        log_scaled = np.ma.log10(1 + scale * x_norm) / np.ma.log10(1 + scale)
-        return log_scaled.filled(fill_value=0.0)
-    elif func == "linear":
+        return np.log10(1 + scale * x_norm) / np.log10(1 + scale)
+    if func == "linear":
         return x_norm
-    else:
-        raise ValueError(f"Unsupported function: {func}")
+    raise ValueError(f"Unsupported function: {func}")
 
+
+def get_chip(filename):
+    """
+    Return the float stack of a FITS file.
+    Uses the first HDU holding a 3D array with a dimension of 4.
+    """
+    with fits.open(filename) as hdul:
+        for hdu in hdul:
+            if (isinstance(hdu.data, np.ndarray) and hdu.data.ndim == 3
+                    and hdu.data.shape[0] == 4):
+                return hdu.data.astype(float)
+
+        chips = [hdu.data.astype(float) for hdu in hdul
+                 if isinstance(hdu.data, np.ndarray) and hdu.data.ndim == 2]
+        if len(chips) == 4:
+            return np.array(chips)
+
+    raise ValueError(f"No 4-chip image stack found in {filename}")
+
+
+def get_exposure(index, root="."):
+    """
+    Find and load every calibration file of one exposure by its index.
+
+    Returns a dict keyed by 'raw', 'maskfile', 'blevfile', 'biasfile',
+    'darkfile', 'flatfile'. Each value is (primary_header, data) with data
+    of shape (4, y, x) as float.
+    """
+    exposure = {}
+    for name in CAL_TYPES:
+        matches = sorted(Path(root).rglob(f"ubai{index}m_{name}.fits"))
+        if not matches:
+            raise FileNotFoundError(
+                f"ubai{index}m_{name}.fits not found under {Path(root).resolve()}")
+        path = matches[0]
+        with fits.open(path) as hdul:
+            header = hdul[0].header.copy()
+        exposure[name] = (header, get_chip(path))
+        print(f"{name:9s} {path}  shape {exposure[name][1].shape}")
+    return exposure
 
 def plot_calibration_files(files, chip=0, title=None):
-    """
-    Plot one chip of the raw and calibration images, two per row.
-    """
-    names = ["raw", "maskfile", "blevfile", "biasfile", "darkfile", "flatfile"]
-    fig, axes = plt.subplots(3, 2, figsize=(10, 15))
-    axes = axes.ravel()
+    """Plot one chip of the raw image and every calibration file, two per row."""
 
-    for i in range(len(names)):
-        data = files[names[i]][1][chip]
-        # The mask only has the values 0, 2 and 256, so no log stretch
-        if names[i] == "maskfile":
+    fig, axes = plt.subplots(3, 2, figsize=(10, 15))
+    for ax, name in zip(axes.ravel(), CAL_TYPES):
+        data = files[name][1][chip]
+        if name == "maskfile":  # only values 0, 2, 256: no log stretch
             image = transform_by("linear", data, pmin=0, pmax=100)
         else:
             image = transform_by("log", data, pmin=1, pmax=99)
-        im = axes[i].imshow(image, origin="lower", aspect="auto")
-        axes[i].set_title(f"{names[i]} (chip {chip})")
-        fig.colorbar(im, ax=axes[i])
-
-
+        im = ax.imshow(image, origin="lower", aspect="auto")
+        ax.set_title(f"{name} (chip {chip})")
+        fig.colorbar(im, ax=ax)
     if title:
         fig.suptitle(title, fontsize=14)
     fig.tight_layout()
     return fig
 
 
+def plot_correction(before, correction, after, titles, chip=0):
+    """
+    Plot one chip of the image before a correction, the correction itself,
+    and the image after, side by side (colour limits = 1st/99th percentile).
+    """
+    images = [before[chip], correction[chip], after[chip]]
+    fig, axes = plt.subplots(1, 3, figsize=(20, 6))
+    for ax, img, t in zip(axes, images, titles):
+        vmin, vmax = np.nanpercentile(img, [1, 99])
+        im = ax.imshow(img, origin="lower", cmap="plasma", vmin=vmin, vmax=vmax)
+        ax.set_title(f"{t} (chip {chip})")
+        fig.colorbar(im, ax=ax, label="DN")
+    fig.tight_layout()
+    return fig
+
+
 def print_statistics(data, name="Data"):
-    """
-    Print the mean, median, standard deviation, min and max of each chip.
-    NaN-safe functions are used because the masked pixels are NaN.
-    """
+    """Print mean, median, std, min and max of each chip (NaN-safe)."""
     print("------------------------ ")
     print(f"{name} statistics: ")
     for chip in range(data.shape[0]):
@@ -208,40 +209,54 @@ def print_statistics(data, name="Data"):
         )
     print()
 
+#
+# def plot_masked_pixels(raw_data, mask_data, chip=0, zoom_x=(350, 500), zoom_y=(500, 650)):
+#     """Raw image with defective (red) / questionable (cyan) pixels, plus a zoom."""
+#     raw_image = transform_by("sqrt", raw_data[chip], pmin=1, pmax=99)
+#     dy, dx = np.where(mask_data[chip] == MASK_CODES["defective"])
+#     qy, qx = np.where(mask_data[chip] == MASK_CODES["questionable"])
+#
+#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
+#     for ax in (ax1, ax2):
+#         ax.imshow(raw_image, origin="lower", cmap="gray")
+#         ax.scatter(dx, dy, s=1, color="red", label="defective")
+#         ax.scatter(qx, qy, s=1, color="cyan", label="questionable")
+#     ax1.set_title(f"Raw image with masked pixels (chip {chip})")
+#     ax1.legend(loc="lower left", markerscale=10, fontsize=16)
+#     ax2.set_xlim(*zoom_x)
+#     ax2.set_ylim(*zoom_y)
+#     ax2.set_title("Zoom on the bad columns")
+#     ax2.legend(loc="lower left", markerscale=10, fontsize=16)
+#     fig.tight_layout()
+#     return fig
+#
+#
 
-def mask_invalid_data(raw_data, mask_data):
-    """
-    Return a float copy of raw_data where the defective (2) and
-    questionable (256) pixels of mask_data are set to NaN.
-    """
-    raw_data_masked = raw_data.astype(float)
-    raw_data_masked[(mask_data == 2) | (mask_data == 256)] = np.nan
-    return raw_data_masked
 
+#
 def mask_statistics(files, exposure_name=None):
-    """
-    Print and return the valid / defective / questionable pixel counts
-    for every chip in an exposure's maskfile.
-
-    files: dict from load_calibration_files (needs the 'maskfile' key)
-    Returns {chip: {"total", "valid", "defective", "questionable"}}.
-    """
-    mask_header, mask_data = files["maskfile"]
-    codes = {"valid": 0, "defective": 2, "questionable": 256}
-
-    title = f"Mask statistics{f' for {exposure_name}' if exposure_name else ''}"
-    print(title)
-
+    """Print and return valid / defective / questionable counts per chip."""
+    _, mask_data = files["maskfile"]
+    print(f"Mask statistics{f' for {exposure_name}' if exposure_name else ''}")
     stats = {}
     for chip in range(mask_data.shape[0]):
         total = mask_data[chip].size
-        counts = {label: int(np.sum(mask_data[chip] == code)) for label, code in codes.items()}
+        counts = {k: int(np.sum(mask_data[chip] == c)) for k, c in MASK_CODES.items()}
         stats[chip] = {"total": total, **counts}
-
-        parts = ", ".join(f"{label} = {n} ({100 * n / total:.2f}%)" for label, n in counts.items())
+        parts = ", ".join(f"{k} = {n} ({100 * n / total:.2f}%)" for k, n in counts.items())
         print(f"Chip {chip}: total = {total}, {parts}")
     print()
     return stats
+#
+#
+# # --------------------------------------------------------------------------
+# # Calibration steps
+#
+def mask_invalid_data(raw_data, mask_data):
+    """Float copy of raw_data with defective (2) and questionable (256) pixels = NaN."""
+    masked = raw_data.astype(float)
+    masked[(mask_data == 2) | (mask_data == 256)] = np.nan
+    return masked
 
 def remove_bias_level(raw_data_masked, blev_data):
     """
@@ -251,22 +266,16 @@ def remove_bias_level(raw_data_masked, blev_data):
     raw_data_blev_corrected = raw_data_masked.copy()
 
     for chip in range(raw_data_masked.shape[0]):
-        # Divide the overscan in even and odd columns
         blev_overscan_even = blev_data[chip, :, 7:12:2]
         blev_overscan_odd = blev_data[chip, :, 8:13:2]
 
-        # Get the mean values
         overscan_even_mean = np.mean(blev_overscan_even)
         overscan_odd_mean = np.mean(blev_overscan_odd)
 
-        # Subtract
-        for i in range(raw_data_masked.shape[2]):
-            is_even_column = (i % 2 == 1)  # Don't forget python indexing
-            if is_even_column:
-                raw_data_blev_corrected[chip, :, i] -= overscan_even_mean
-            else: # Odd column
-                raw_data_blev_corrected[chip, :, i] -= overscan_odd_mean
-    print()
+        # python index 1, 3, 5... are the "even" (1-based) columns
+        raw_data_blev_corrected[chip, :, 1::2] -= overscan_even_mean
+        raw_data_blev_corrected[chip, :, 0::2] -= overscan_odd_mean
+        print(f"Chip {chip}: even overscan = {overscan_even_mean:.3f}, odd overscan = {overscan_odd_mean:.3f}")
 
     return raw_data_blev_corrected
 
@@ -274,49 +283,74 @@ def remove_bias_image(raw_data_blev_corrected, bias_data):
     """
     Subtract the bias data image from the blev corrected image
     """
-    # Simply substract one from the other
-    raw_data_bias_corrected = raw_data_blev_corrected - bias_data
-    return raw_data_bias_corrected
-
-def plot_correction(before, correction, after, titles, chip=0):
-    """
-    Plot one chip of the image before the correction, the correction
-    that was subtracted and the image after the correction, side by side.
-    The colour limits are the 1st and 99th percentiles of each image.
-    """
-    images = [before[chip], correction[chip], after[chip]]
-
-    fig, axes = plt.subplots(1, 3, figsize=(20, 6))
-    for i in range(3):
-        vmin = np.nanpercentile(images[i], 1)
-        vmax = np.nanpercentile(images[i], 99)
-        im = axes[i].imshow(images[i], origin="lower", cmap="plasma", vmin=vmin, vmax=vmax)
-        axes[i].set_title(f"{titles[i]} (chip {chip})")
-        fig.colorbar(im, ax=axes[i], label="DN")
-
-    fig.tight_layout()
-    return fig                      # was: plt.show()
+    return raw_data_blev_corrected - bias_data
 
 def remove_dark(raw_data_bias_corrected, dark_data, dark_time):
     """
-    Subtract the dark image, considering dark time time, from the bias corrected data
+    Subtract the dark image, scaled by the dark time, from the bias corrected data
     """
-    raw_data_dark_corrected = raw_data_bias_corrected - dark_data * dark_time
-    return raw_data_dark_corrected
+    return raw_data_bias_corrected - dark_data * dark_time
 
+#%%
 def correct_flatfield(raw_data_dark_corrected, flat_data):
     """
     Multiply the image by the flat_data (inverse sensitivity)
     """
-    raw_data_flat_corrected = raw_data_dark_corrected * flat_data
-    return raw_data_flat_corrected
+    return raw_data_dark_corrected * flat_data
+
+def calibrate_total(exposure):
+    raw_header, raw_data     = exposure["raw"]
+    mask_header, mask_data   = exposure["maskfile"]
+    blev_header, blev_data   = exposure["blevfile"]
+    bias_header, bias_data   = exposure["biasfile"]
+    dark_header, dark_data   = exposure["darkfile"]
+    flat_header, flat_data   = exposure["flatfile"]
+    dark_time = raw_header["DARKTIME"]
+
+    raw_data_masked = mask_invalid_data(raw_data, mask_data)
+    raw_data_blev_corrected = remove_bias_level(raw_data_masked, blev_data)
+    raw_data_bias_corrected = remove_bias_image(raw_data_blev_corrected, bias_data)
+    raw_data_dark_corrected = remove_dark(raw_data_bias_corrected, dark_data, dark_time)
+    raw_data_flat_corrected = correct_flatfield(raw_data_dark_corrected, flat_data)
+
+    sky = get_sky(raw_data_flat_corrected)
+
+    # subtract on a copy so the flat-corrected image is kept
+    calibrated_data = raw_data_flat_corrected.copy()
+    for chip in range(calibrated_data.shape[0]):
+        calibrated_data[chip] -= sky[chip]
+
+    return calibrated_data
+
+# Sky functions and logic were discussed with Thomas Collins and Andreu, we may have similar functions for this
+
+def filter_mad(sample, threshold=3):
+    """
+    Flag values more than `threshold` MAD-based sigmas above the median.
+    """
+    median = np.nanmedian(sample)
+    mad = np.nanmedian(np.abs(sample - median))
+    stddev = 1.4826 * mad
+    with np.errstate(invalid="ignore"):          # NaN pixels compare as False
+        flag = (sample - median) / stddev > threshold
+    return flag
+
+def get_sky(corrected_data):
+    """
+    Sky level per chip: median of the pixels left after MAD clipping of
+    the bright (star) pixels and the NaN (masked) pixels.
+    """
+    skies = []
+    for chip in range(corrected_data.shape[0]):
+        flag = filter_mad(corrected_data[chip], 3)
+        masked = np.ma.masked_array(corrected_data[chip],
+                                    mask=flag | np.isnan(corrected_data[chip]))
+        skies.append(float(np.ma.median(masked)))
+    return np.array(skies)
 
 def spectral_flux(data):
-    """
-    Calculate the spectral flux from calibrated data
-    """
-    counts_per_sec = data / EXPTIME
-    flux = counts_per_sec * photometry_tables["PHOTFLAM"]
+    counts_per_sec = data / exptime
+    flux = counts_per_sec * PHOTOMETRY["PHOTFLAM"]
     return flux
 
 def get_appmag(flux):
@@ -326,141 +360,281 @@ def get_appmag(flux):
     flux = np.asarray(flux, dtype=float)
     app_mag = np.full_like(flux, np.nan)
     good = np.isfinite(flux) & (flux > 0)
-    app_mag[good] = -2.5 * np.log10(flux[good]) + photometry_tables["PHOTZPT"]
+    app_mag[good] = -2.5 * np.log10(flux[good]) + PHOTOMETRY["PHOTZPT"]
     return app_mag
 
-def get_abs_mag(dpc, app_mag):
+def get_abs_mag(app_mag, dpc=DPC ):
     """
     convert an apparent magnitude to absolute magnitude
     given a distance in parsec (pc)
     """
     return app_mag + 5 - 5 * np.log10(dpc)
 
-def calibrated_magnitudes(corrected_data, dpc):
-    flux = spectral_flux(corrected_data)
-    app_mag = get_appmag(flux)
-    abs_mag = get_abs_mag(dpc, app_mag)
-
-    return flux, app_mag, abs_mag
-
-def aligned_magnitudes(data_file, dpc=DPC, exptime=EXPTIME, counts_per_second=False):
+def histogram(ax, x, bins=100, xrange=None, density=False,
+              normed=True, histtype='step', **kwargs):
     """
-    Load an aligned FITS file and return (flux, apparent_mag, absolute_mag).
+    compute and plot a histogram from some given data, correctly
+    handling normalization
+    # Author: Dr Andrew Kirwan
 
-    counts_per_second: set True if BUNIT says the data are already rates,
-                       so the exposure-time division is skipped.
+    Parameters:
+    -----------
+    ax: matplotlib.axes.Axes instance
+        where to plot the data
+    x: array
+        input values
+    bins: int
+        number of bins to use
+    range: tuple or None
+        bin range
+    density: bool (default False)
+        if True, return a noramlised probability density
+    normed: bool, default True
+        if True, return a normalized histogram
+    histtype: one of 'bar', 'stacked', 'step', 'stepfilled'; default 'step'
+        what type of histogram to draw
+
+    Returns:
+    ----------
+    n, bins, patches:
+        see Axes.stairs for more information
     """
-    with fits.open(data_file) as hdul:
-        data = hdul[1].data.astype(float)
-        # bunit = hdul[1].header.get("BUNIT", hdul[0].header.get("BUNIT", "unknown"))
+    counts, bin_edges = np.histogram(x, bins, range=xrange)
+    widths = bin_edges[1:] - bin_edges[:-1]
 
-    rate = data if counts_per_second else data / exptime
-    flux = rate * photometry_tables["PHOTFLAM"]  # erg / s / cm^2 / Angstrom
+    if density:
+        counts = counts / (widths * x.size)
+    elif normed:
+        counts = counts / widths
 
-    app_mag = get_appmag(flux)  # NaN where flux <= 0
-    abs_mag = get_abs_mag(dpc, app_mag)
+    return ax.hist(
+        bin_edges[:-1], bin_edges, weights=counts, histtype=histtype, **kwargs
+    )
 
-    return flux, app_mag, abs_mag
-
-def compare_mags(calibrated, aligned, chip=0, mag_index=1, label="m (STMAG)"):
+def convert_to_flux(data, header1, header2):
     """
-    Compare magnitudes from my calibration with those from the aligned file.
+    header1: science-extension header (PHOTFLAM, BUNIT)
+    header2: primary header (EXPTIME)
+    Returns flux in erg/cm2/s/A and an updated header.
 
-    calibrated, aligned : tuples (flux, app_mag, abs_mag)
-    chip      : chip of the (4, rows, cols) calibrated array that matches the aligned image
-    mag_index : 1 = apparent, 2 = absolute (differences are identical)
-
-    Returns (fig, stats); stats["diff_image"] is mine - reference.
+    This function is form the workshop
     """
-    mine = np.asarray(calibrated[mag_index], dtype=float)
-    ref = np.asarray(aligned[mag_index], dtype=float)
-    if mine.ndim == 3:
-        mine = mine[chip]
+    photflam = header1['PHOTFLAM']
+    bunit = str(header1['BUNIT']).strip().upper()   # header case varies: COUNTS/S, COUNTS/s...
+    exposure_time = header2['EXPTIME']
 
-    both = np.isfinite(mine) & np.isfinite(ref)
+    flux = np.array(data, dtype=float)
+    if not bunit.endswith('/S'):                     # totals, not a rate
+        flux = flux / exposure_time
+    flux = flux * photflam
 
-    diff = np.full_like(mine, np.nan)
-    diff[both] = mine[both] - ref[both]
-    d = diff[both]
+    new_header = header1.copy()
+    new_header['BUNIT'] = 'erg/cm2/s/A'
+    return flux, new_header
 
-    stats = {
-        "mean": float(d.mean()),
-        "median": float(np.median(d)),
-        "std": float(d.std()),
-        "robust_std": float(1.4826 * np.median(np.abs(d - np.median(d)))),
-        "diff_image": diff,
+def compare_magnitudes(mine_dn, aligned_file, exptime, photflam,
+                       add_sky=0.0, bright_percentile=90, plot=True):
+    """
+    Compare the magnitudes of my calibrated chip with the aligned HST file.
+
+    Parameters
+    ----------
+    mine_dn :  My calibrated chip in DN (unstretched), e.g. calibrated_data[0].
+    aligned_file : str or Path
+        The *_c0m_aligned.fits file (science data in extension 1).
+    exptime : Exposure time of my raw exposure (s).
+    photflam : HOTFLAM for my chip (e.g. photometry_tables["PHOTFLAM"]).
+    add_sky : Sky level to add back to my chip before converting (the STScI product
+        is not sky-subtracted). Use sky[0] to add it back, 0 to leave it out.
+    bright_percentile : float
+        Statistics use only pixels above this percentile of the reference,
+        because faint pixels are noise-dominated.
+    plot : Draw the magnitude maps and the difference histogram.
+
+    Returns
+    -------
+    dict with mag_mine, mag_ref, dmag_img, valid, bright, and the summary stats.
+    """
+    # Reference: read data and headers - from the workbook (modified)
+    with fits.open(aligned_file) as hdul:
+        ref_header_sci = hdul[1].header.copy()
+        ref_header_prim = hdul[0].header.copy()
+        ref_data = hdul[1].data.astype(float)
+
+    print("Reference BUNIT:", ref_header_sci.get("BUNIT"),
+          "| PHOTFLAM:", ref_header_sci.get("PHOTFLAM"),
+          "| EXPTIME:", ref_header_prim.get("EXPTIME"))
+
+    if mine_dn.shape != ref_data.shape:
+        raise ValueError(f"Grids differ: {mine_dn.shape} vs {ref_data.shape}")
+
+    # Calculate Flux for own and reference
+    flux_ref, _ = convert_to_flux(ref_data, ref_header_sci, ref_header_prim)
+    flux_mine, _ = convert_to_flux(mine_dn + add_sky,
+                                   {"PHOTFLAM": photflam, "BUNIT": "COUNTS"},
+                                   {"EXPTIME": exptime})
+    print(f"Mean flux: mine {np.nanmean(flux_mine):.3e}, reference {np.nanmean(flux_ref):.3e}")
+
+    # Magnitudes (get_appmag)
+    mag_mine = get_appmag(flux_mine)
+    mag_ref = get_appmag(flux_ref)
+
+    valid = np.isfinite(mag_mine) & np.isfinite(mag_ref)
+    bright = valid & (ref_data > np.nanpercentile(ref_data, bright_percentile))
+    dmag_img = np.where(valid, mag_mine - mag_ref, np.nan)
+    dmag = dmag_img[bright]
+
+    stats = dict(median=np.median(dmag), mean=np.mean(dmag), std=np.std(dmag),
+                 within_0p1=np.mean(np.abs(dmag) < 0.1),
+                 n_valid=int(valid.sum()), n_bright=int(bright.sum()))
+
+    print(f"Valid in both: {stats['n_valid']}, bright subset: {stats['n_bright']}")
+    print(f"Median dm: {stats['median']:.4f} mag, std: {stats['std']:.4f} mag")
+    print(f"{stats['within_0p1']:.1%} of bright pixels within 0.1 mag")
+
+    #
+    figs = {}
+    if plot:
+        cmap = plt.get_cmap("coolwarm").copy()
+        cmap.set_bad("lightgrey")
+
+        #  magnitude maps + difference map
+        fig_maps, axes = plt.subplots(1, 3, figsize=(20, 6))
+        vmin, vmax = np.nanpercentile(
+            np.concatenate([mag_mine[valid], mag_ref[valid]]), [1, 99])
+        for ax, m, t in [(axes[0], mag_mine, "My calibration"),
+                         (axes[1], mag_ref, "Aligned reference")]:
+            im = ax.imshow(m, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax)
+            ax.set_title(f"{t}: apparent magnitude")
+            fig_maps.colorbar(im, ax=ax, label="m (STMAG)")
+
+        lim = np.nanpercentile(np.abs(dmag_img[valid]), 95)
+        im = axes[2].imshow(dmag_img, origin="lower", cmap=cmap, vmin=-lim, vmax=lim)
+        axes[2].set_title("Δm = mine - reference")
+        fig_maps.colorbar(im, ax=axes[2], label="Δm (mag)")
+        fig_maps.tight_layout()
+
+        # --- histogram of diff m ---
+        fig_hist, ax = plt.subplots(figsize=(7, 5))
+        ax.hist(dmag, bins=np.linspace(*np.percentile(dmag, [0.5, 99.5]), 150),
+                histtype="step", lw=1.5, color="k")
+        ax.axvline(0, color="r", ls="--")
+        ax.axvline(stats["median"], color="C2", ls=":",
+                   label=f"median = {stats['median']:.3f}")
+        ax.set_xlabel("Δm (mag)")
+        ax.set_ylabel("number of pixels")
+        ax.set_title("Magnitude difference, bright pixels")
+        ax.legend()
+        fig_hist.tight_layout()
+
+        figs = {"maps": fig_maps, "hist": fig_hist}
+
+    return stats, figs
+
+def get_stages(exposure):
+    """
+    Run the same steps as calibrate_total, but keep every intermediate image.
+    """
+    raw_header, raw_data   = exposure["raw"]
+    _, mask_data           = exposure["maskfile"]
+    _, blev_data           = exposure["blevfile"]
+    _, bias_data           = exposure["biasfile"]
+    _, dark_data           = exposure["darkfile"]
+    _, flat_data           = exposure["flatfile"]
+    dark_time = raw_header["DARKTIME"]
+
+    masked = mask_invalid_data(raw_data, mask_data)
+    blev   = remove_bias_level(masked, blev_data)
+    bias   = remove_bias_image(blev, bias_data)
+    dark   = remove_dark(bias, dark_data, dark_time)
+    flat   = correct_flatfield(dark, flat_data)
+
+    sky = get_sky(flat)
+    sky_image = np.broadcast_to(sky[:, None, None], flat.shape)
+
+    return {
+        "dark_time":   dark_time,
+        "masked":      masked,
+        "bias_level":  masked - blev,          # the level that was subtracted
+        "blev":        blev,
+        "bias":        bias,
+        "dark_scaled": dark_data * dark_time,  # the dark that was subtracted
+        "dark":        dark,
+        "flat":        flat,
+        "sky":         sky,
+        "sky_image":   sky_image,
+        "calibrated":  flat - sky_image,
     }
 
-    print(f"diff (mine - ref): mean {stats['mean']:+.4f}, median {stats['median']:+.4f}, "
-          f"std {stats['std']:.4f}, robust std {stats['robust_std']:.4f}")
 
-    fig, axes = plt.subplots(1, 4, figsize=(26, 6), tight_layout=True)
-
-    vmin, vmax = np.nanpercentile(ref, [1, 99])
-    for ax, img, title in zip(axes[:2], (mine, ref),
-                              (f"My calibrated (chip {chip})", "Aligned reference")):
-        im = ax.imshow(img, origin="lower", cmap="plasma_r", vmin=vmin, vmax=vmax)
-        ax.set_title(title)
-        fig.colorbar(im, ax=ax, fraction=0.046, label=label)
-
-    lim = np.nanpercentile(np.abs(d), 99)
-    im = axes[2].imshow(diff, origin="lower", cmap="RdBu_r", vmin=-lim, vmax=lim)
-    axes[2].set_title("Mine - reference")
-    fig.colorbar(im, ax=axes[2], fraction=0.046, label="Delta mag")
-
-    h, e = np.histogram(d, bins=np.linspace(-lim, lim, 201))
-    axes[3].plot(0.5 * (e[:-1] + e[1:]), np.where(h > 0, h, np.nan))
-    axes[3].axvline(stats["median"], color="r", ls="--", label=f"median {stats['median']:+.3f}")
-    axes[3].set_yscale("log")
-    axes[3].set_xlabel("Mine - reference (mag)")
-    axes[3].set_ylabel("pixels")
-    axes[3].set_title(f"Differences: std {stats['std']:.3f}, robust {stats['robust_std']:.3f}")
-    axes[3].legend()
-
-    return fig, stats
-
-def filter_mad(corrected_data, thresh=3):
+def report_intermediate_results(exposure, exposure_name, calibrated=None,
+                                out_dir=None, chip=0, show=False):
     """
-    Flag values more than `thresh` robust standard deviations above the median.
-    Robust std = 1.4826 * MAD.
-    Returns a boolean mask, True where a value is flagged.
+    Print the statistics after every calibration step and plot each
+    correction (before | correction | after).
+
+    exposure   : dict from get_exposure()
+    calibrated : output of calibrate_total(exposure)
+    Figures are saved to out_dir
+
     """
-    median = np.nanmedian(corrected_data)
-    mad = np.nanmedian(np.abs(corrected_data - median))
-    stddev = 1.4826 * mad
+    stages = get_stages(exposure)
 
-    flag = (corrected_data - median) / stddev > thresh
-    print(f"MAD thresholding produced {flag.sum()} values above the threshold")
-    return flag
+    if calibrated is not None:
+        if not np.allclose(calibrated, stages["calibrated"], equal_nan=True):
+            print("WARNING: calibrate_total output differs from the recomputed stages")
 
-def get_sky(corrected_data):
-    skies = []
-    for chip in range(corrected_data.shape[0]):
+    _, blev_data = exposure["blevfile"]
+    _, flat_data = exposure["flatfile"]
+    _, bias_data = exposure["biasfile"]
+    dark_time = stages["dark_time"]
 
-        flag = filter_mad(corrected_data[chip], 3)
+    print("\n" + "=" * 60)
+    print(f"Intermediate results: {exposure_name}")
+    print("=" * 60)
+    print_statistics(blev_data[:, :, 7:12:2], name="Blev overscan even columns")
+    print_statistics(blev_data[:, :, 8:13:2], name="Blev overscan odd columns")
+    print_statistics(stages["masked"], name="Masked data")
+    print_statistics(stages["blev"], name="Bias level corrected")
+    print_statistics(bias_data, name="Bias image")
+    print_statistics(stages["bias"], name="Bias image corrected")
+    print_statistics(stages["dark_scaled"], name=f"Dark data * darktime ({dark_time}s)")
+    print_statistics(stages["dark"], name="Dark corrected")
+    print_statistics(flat_data, name="Flatfield data")
+    print_statistics(stages["flat"], name="Flatfield corrected")
+    print("Sky level per chip (DN):", np.round(stages["sky"], 3))
+    print_statistics(stages["calibrated"], name="Final calibrated (sky subtracted)")
 
-        masked = np.ma.masked_array(corrected_data[chip],mask=flag | np.isnan(corrected_data[chip]))
+    plots = [
+        ("BiasLevel", "Bias level corrected",
+         (stages["masked"], stages["bias_level"], stages["blev"]),
+         ["Masked data", "Bias level removed", "Bias level corrected"]),
+        ("BiasImage", "Bias image corrected",
+         (stages["blev"], bias_data, stages["bias"]),
+         ["Bias level corrected", "Bias image", "Bias image corrected"]),
+        ("Dark", "Dark corrected",
+         (stages["bias"], stages["dark_scaled"], stages["dark"]),
+         ["Bias corrected", f"Dark image x {dark_time:.0f} s", "Dark corrected"]),
+        ("FlatField", "Flatfield correction",
+         (stages["dark"], flat_data, stages["flat"]),
+         ["Dark corrected", "Flatfield image", "Flatfield corrected"]),
+        ("Sky", "Sky correction",
+         (stages["flat"], stages["sky_image"], stages["calibrated"]),
+         ["Flatfield corrected", "Sky contribution", "Sky corrected"]),
+    ]
+    for tag, title, (before, corr, after), titles in plots:
+        fig = plot_correction(before, corr, after, titles, chip=chip)
+        fig.suptitle(f"{title}: {exposure_name}")
+        _finish_figure(fig, out_dir, f"{exposure_name}_{tag}.png", show)
 
+    return stages
 
-        skies.append(np.ma.median(masked))
+def _finish_figure(fig, out_dir, filename, show):
+    """Save and show/close a figure."""
+    if out_dir is not None:
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        fig.savefig(Path(out_dir) / filename, dpi=200, bbox_inches="tight")
+    if show:
+        plt.show()
+    plt.close(fig)
 
-    return np.array(skies)
-
-# def correct_sky(corrected_data, thresh=3):
-#     sky = []
-#     sky_corrected = np.full_like(corrected_data, np.nan, dtype=float)
-#
-#     for chip in range(corrected_data.shape[0]):
-#         data = corrected_data[chip]
-#
-#         flag = filter_mad(data, thresh)
-#         masked = np.ma.masked_array(data, mask=flag | np.isnan(data))
-#
-#         chip_sky = float(np.ma.median(masked))
-#         sky.append(chip_sky)
-#         sky_corrected[chip] = data - chip_sky
-#
-#     sky = np.array(sky)                                   # list -> array so it can be indexed
-#     sky_image = np.broadcast_to(sky[:, None, None], corrected_data.shape)
-#
-#     return sky_corrected, sky, sky_image
