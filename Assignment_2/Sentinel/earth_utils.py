@@ -180,7 +180,6 @@ def pixel_size(path, img, scale_bar_m=SCALE_BAR_M, default_bar_m=DEFAULT_BAR_M):
 def scale_bar_table(paths, scale_bar_m=SCALE_BAR_M, default_bar_m=DEFAULT_BAR_M):
     """
     Measure the scale bar of every image and print a summary table.
-    dL is the assumed +/- error (px) on the bar length.
     Returns {stem: dict of the measured values}.
     """
     results = {}
