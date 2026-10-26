@@ -17,4 +17,4 @@ venv/
 Zone.Identifier
 
 # Pycache-related
-_pycache_
+__pycache__
