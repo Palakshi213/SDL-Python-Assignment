@@ -21,7 +21,6 @@ from Assignment_2.HST.hst_utils import (
     plot_correction,
     remove_dark,
     correct_flatfield,
-    correct_sky,
     DPC,
     aligned_magnitudes,
     calibrated_magnitudes,
@@ -38,8 +37,8 @@ def main():
     ubai2507m = load_calibration_files(calib_dir / "ubai2507m")
     ubai2508m = load_calibration_files(calib_dir / "ubai2508m")
 
-    exposure = ubai2505m
-    exposure_name = "ubai2505m"
+    exposure = ubai2508m
+    exposure_name = "ubai2508m"
 
     out_dir = Path("calibration_plots")
     out_dir.mkdir(exist_ok=True)
@@ -178,7 +177,7 @@ def main():
     # )
     # fig.suptitle(f"Sky correction: {exposure_name}")
     # fig.savefig(out_dir / f"{exposure_name}_Sky.png", dpi=200, bbox_inches="tight")
-    plt.close(fig)
+    # plt.close(fig)
 
     # -------------------------------------
     # Compare Magnitudes

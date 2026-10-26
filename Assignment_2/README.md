@@ -144,3 +144,20 @@ those pixels are flagged as outliers: cosmic rays, hot pixels, and also real sta
 Faint pixels will have a large scatter because magnitude differences blow up near zero flux,
 
 ## Part 2: HST Calibration Routine
+
+
+
+
+
+
+
+
+
+
+### Part 3: Sentinel-2 Images 
+
+- mention that 2021 Dec was discarded 
+- found the land area for the same years from b12 - why b12? 
+- mention that small blobs were small and not removed in the images as it would be unclear from this alone that it was clouds or rogue sections of vegetation 
+- if more time: constrain the blob removal to the land area from b12 
+- mask for 2022Jan also produces artificial artefacts caused by shadows and inaccuracies
